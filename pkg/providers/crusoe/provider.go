@@ -112,12 +112,6 @@ func (p *baseProvider) GenerateTopologyConfig(ctx context.Context, pageSize *int
 	return topo.ToThreeTierGraph(NAME, instances, false), nil
 }
 
-// generateInstanceTopology is a placeholder that will be implemented in commit 3
-func (p *baseProvider) generateInstanceTopology(ctx context.Context, instances []topology.ComputeInstances) (*topology.ClusterTopology, *httperr.Error) {
-	// TODO: Implement in commit 3
-	return topology.NewClusterTopology(), nil
-}
-
 // Engine support methods for SLURM integration
 
 // Instances2NodeMap maps instance IDs to K8s node names (identity mapping for Crusoe)
