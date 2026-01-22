@@ -13,22 +13,22 @@ import (
 
 const (
 	// Label keys for Crusoe topology information
-	labelPartitionID = "crusoe.ai/partition-id"
-	labelPodID       = "crusoe.ai/pod-id"
+	labelPartitionID = "crusoe.ai/ib.partition.id"
+	labelSwitchID    = "crusoe.ai/switch.id"
 )
 
-// extractTopologyLabels extracts partition_id and pod_id from node labels
-func extractTopologyLabels(labels map[string]string) (partitionID, podID string, err error) {
+// extractTopologyLabels extracts partition_id and switch_id from node labels
+func extractTopologyLabels(labels map[string]string) (partitionID, switchID string, err error) {
 	partitionID, ok := labels[labelPartitionID]
 	if !ok || len(partitionID) == 0 {
 		return "", "", fmt.Errorf("missing or empty label %q", labelPartitionID)
 	}
 
-	podID, ok = labels[labelPodID]
-	if !ok || len(podID) == 0 {
-		return "", "", fmt.Errorf("missing or empty label %q", labelPodID)
+	switchID, ok = labels[labelSwitchID]
+	if !ok || len(switchID) == 0 {
+		return "", "", fmt.Errorf("missing or empty label %q", labelSwitchID)
 	}
 
-	klog.V(4).Infof("Extracted topology labels: partition=%q pod=%q", partitionID, podID)
-	return partitionID, podID, nil
+	klog.V(4).Infof("Extracted topology labels: partition=%q switch=%q", partitionID, switchID)
+	return partitionID, switchID, nil
 }

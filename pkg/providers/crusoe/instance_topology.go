@@ -104,7 +104,7 @@ func shouldSkipNode(nodeName string, requestedIDs map[string]struct{}) bool {
 
 // buildInstanceTopology constructs topology object from node labels
 func buildInstanceTopology(node corev1.Node) (*topology.InstanceTopology, error) {
-	partition, pod, err := extractTopologyLabels(node.Labels)
+	partition, switchID, err := extractTopologyLabels(node.Labels)
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +112,11 @@ func buildInstanceTopology(node corev1.Node) (*topology.InstanceTopology, error)
 	return &topology.InstanceTopology{
 		InstanceID:     node.Name,
 		DatacenterID:   partition,
-		SpineID:        pod,
-		BlockID:        pod,
-		DatacenterName: "partition-" + partition,
-		SpineName:      "pod-" + pod,
-		BlockName:      "pod-" + pod,
+		SpineID:        switchID,
+		BlockID:        switchID,
+		DatacenterName: partition,
+		SpineName:      "switch-" + switchID,
+		BlockName:      "switch-" + switchID,
 	}, nil
 }
 

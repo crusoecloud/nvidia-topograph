@@ -1,0 +1,62 @@
+# Crusoe 2-Tier Topology Model
+#
+# Tier 1: Partitions (physical InfiniBand isolation boundaries)
+# Tier 2: Switches (leaf switches)
+#
+# Label format matches actual Crusoe nodes:
+#   crusoe.ai/ib.partition.id=<UUID>
+#   crusoe.ai/ib.partition.name=<readable name>
+#   crusoe.ai/switch.id=<UUID>
+#
+# Structure:
+#   76034b3f-a826-4fb5-8a76-9afd8bc9fa8b (msi-h200-icat-ibp)
+#     ├── switch-1 (ca6b3558-e3bf-fad1-2748-73582365f740) → CB1: 4 VMs
+#     └── switch-2 (ca6b3558-e3bf-fad1-2748-73582365f741) → CB2: 4 VMs
+#   76034b3f-a826-4fb5-8a76-9afd8bc9fa8c (msi-h200-icat-ibp-2)
+#     ├── switch-3 (ca6b3558-e3bf-fad1-2748-73582365f742) → CB3: 4 VMs
+#     └── switch-4 (ca6b3558-e3bf-fad1-2748-73582365f743) → CB4: 4 VMs
+#
+switches:
+- name: msi-h200-icat-ibp
+  metadata:
+    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b"
+    partition_name: "msi-h200-icat-ibp"
+  switches: [switch-1, switch-2]
+- name: msi-h200-icat-ibp-2
+  metadata:
+    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8c"
+    partition_name: "msi-h200-icat-ibp-2"
+  switches: [switch-3, switch-4]
+- name: switch-1
+  metadata:
+    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b"
+    switch_id: "ca6b3558-e3bf-fad1-2748-73582365f740"
+  capacity_blocks: [CB1]
+- name: switch-2
+  metadata:
+    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b"
+    switch_id: "ca6b3558-e3bf-fad1-2748-73582365f741"
+  capacity_blocks: [CB2]
+- name: switch-3
+  metadata:
+    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8c"
+    switch_id: "ca6b3558-e3bf-fad1-2748-73582365f742"
+  capacity_blocks: [CB3]
+- name: switch-4
+  metadata:
+    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8c"
+    switch_id: "ca6b3558-e3bf-fad1-2748-73582365f743"
+  capacity_blocks: [CB4]
+capacity_blocks:
+- name: CB1
+  type: H100
+  nodes: [a1b2c3d4-1111-1111-1111-111111111111, a1b2c3d4-1111-1111-1111-111111111112, a1b2c3d4-1111-1111-1111-111111111113, a1b2c3d4-1111-1111-1111-111111111114]
+- name: CB2
+  type: H100
+  nodes: [a1b2c3d4-2222-2222-2222-222222222221, a1b2c3d4-2222-2222-2222-222222222222, a1b2c3d4-2222-2222-2222-222222222223, a1b2c3d4-2222-2222-2222-222222222224]
+- name: CB3
+  type: H100
+  nodes: [a1b2c3d4-3333-3333-3333-333333333331, a1b2c3d4-3333-3333-3333-333333333332, a1b2c3d4-3333-3333-3333-333333333333, a1b2c3d4-3333-3333-3333-333333333334]
+- name: CB4
+  type: H100
+  nodes: [a1b2c3d4-4444-4444-4444-444444444441, a1b2c3d4-4444-4444-4444-444444444442, a1b2c3d4-4444-4444-4444-444444444443, a1b2c3d4-4444-4444-4444-444444444444]
