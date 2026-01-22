@@ -18,7 +18,6 @@ import (
 	"github.com/NVIDIA/topograph/pkg/topology"
 )
 
-// extractionStats tracks the results of node processing
 type extractionStats struct {
 	success   int
 	skipped   int
@@ -35,11 +34,11 @@ func (p *baseProvider) generateInstanceTopology(ctx context.Context, instances [
 
 	// Fetch all nodes
 	nodeList, k8sErr := k8s.GetNodes(ctx, p.kubeClient, p.params.nodeListOpt)
+
 	if k8sErr != nil {
 		return nil, httperr.NewError(http.StatusBadGateway, fmt.Sprintf("failed to list nodes: %v", k8sErr))
 	}
 
-	// Process nodes
 	topo := topology.NewClusterTopology()
 	var stats extractionStats
 
@@ -64,6 +63,11 @@ func (p *baseProvider) generateInstanceTopology(ctx context.Context, instances [
 
 	klog.Infof("Topology extraction: %d added, %d skipped, %d missing labels", stats.success, stats.skipped, stats.badLabels)
 
+	// Record metrics
+	nodesProcessed.WithLabelValues("success").Add(float64(stats.success))
+	nodesProcessed.WithLabelValues("skipped").Add(float64(stats.skipped))
+	nodesProcessed.WithLabelValues("missing_labels").Add(float64(stats.badLabels))
+
 	// Handle empty result scenarios
 	if stats.success == 0 {
 		return nil, resolveEmptyTopologyError(stats)
@@ -79,7 +83,7 @@ func getRequestedNodeIDs(instances []topology.ComputeInstances) (map[string]stru
 	}
 
 	if len(instances) == 0 || len(instances[0].Instances) == 0 {
-		return nil, nil // No filter active
+		return nil, nil
 	}
 
 	ids := make(map[string]struct{}, len(instances[0].Instances))
