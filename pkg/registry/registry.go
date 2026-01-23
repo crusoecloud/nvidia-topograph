@@ -24,6 +24,7 @@ import (
 
 	"github.com/NVIDIA/topograph/pkg/providers"
 	"github.com/NVIDIA/topograph/pkg/providers/aws"
+	"github.com/NVIDIA/topograph/pkg/providers/crusoe"
 	"github.com/NVIDIA/topograph/pkg/providers/cw"
 	"github.com/NVIDIA/topograph/pkg/providers/dra"
 	"github.com/NVIDIA/topograph/pkg/providers/gcp"
@@ -37,6 +38,8 @@ import (
 var Providers = providers.NewRegistry(
 	aws.NamedLoader,
 	aws.NamedLoaderSim,
+	crusoe.NamedLoader,
+	crusoe.NamedLoaderSim,
 	infiniband.NamedLoaderBM,
 	infiniband.NamedLoaderK8S,
 	cw.NamedLoader,
