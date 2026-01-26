@@ -14,7 +14,7 @@ import (
 const (
 	// Label keys for Crusoe topology information
 	labelPartitionID = "crusoe.ai/ib.partition.id"
-	labelSwitchID    = "crusoe.ai/switch.id"
+	labelSwitchID    = "crusoe.ai/pod.id"
 )
 
 // extractTopologyLabels extracts partition_id and switch_id from node labels
