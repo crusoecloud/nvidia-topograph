@@ -87,9 +87,10 @@ go test -v -run TestProviderSim ./pkg/providers/crusoe/...
 
 1. **Build and run topograph server**:
    ```bash
-   go run ./cmd/topograph -v=2
+   go run ./cmd/topograph -config tests/configs/topograph-local-config.yaml -v=2
    ```
-   The `-v=2` flag enables verbose logging to see detailed node processing.
+   - The config file sets the HTTP port (49021) and request aggregation delay (2s)
+   - The `-v=2` flag enables verbose logging to see detailed node processing
 
 2. **Verify your nodes have required labels**:
    ```bash

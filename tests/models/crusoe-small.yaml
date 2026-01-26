@@ -3,60 +3,66 @@
 # Tier 1: Partitions (physical InfiniBand isolation boundaries)
 # Tier 2: Pods (leaf switches)
 #
+#                 _________ crusoe _________
+#                /                          \
+#           ibp-1                           ibp-2
+#          /     \                         /     \
+#       pod-1   pod-2                  pod-3   pod-4
+#         |       |                      |       |
+#      -------  -------               -------  -------
+#     | vm-11 || vm-21 |             | vm-31 || vm-41 |
+#     | vm-12 || vm-22 |             | vm-32 || vm-42 |
+#     | vm-13 || vm-23 |             | vm-33 || vm-43 |
+#     | vm-14 || vm-24 |             | vm-34 || vm-44 |
+#      -------  -------               -------  -------
+#        CB1      CB2                   CB3      CB4
+#
 # Label format matches actual Crusoe nodes:
 #   crusoe.ai/ib.partition.id=<UUID>
 #   crusoe.ai/ib.partition.name=<readable name>
 #   crusoe.ai/pod.id=<UUID>
 #
-# Structure:
-#   76034b3f-a826-4fb5-8a76-9afd8bc9fa8b (msi-h200-icat-ibp)
-#     ├── pod-1 (ca6b3558-e3bf-fad1-2748-73582365f740) → CB1: 4 VMs
-#     └── pod-2 (ca6b3558-e3bf-fad1-2748-73582365f741) → CB2: 4 VMs
-#   76034b3f-a826-4fb5-8a76-9afd8bc9fa8c (msi-h200-icat-ibp-2)
-#     ├── pod-3 (ca6b3558-e3bf-fad1-2748-73582365f742) → CB3: 4 VMs
-#     └── pod-4 (ca6b3558-e3bf-fad1-2748-73582365f743) → CB4: 4 VMs
-#
 switches:
-- name: msi-h200-icat-ibp
+- name: ibp-1
   metadata:
-    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b"
-    partition_name: "msi-h200-icat-ibp"
+    partition_id: "ibp-1"
+    partition_name: "ibp-1"
   switches: [pod-1, pod-2]
-- name: msi-h200-icat-ibp-2
+- name: ibp-2
   metadata:
-    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8c"
-    partition_name: "msi-h200-icat-ibp-2"
+    partition_id: "ibp-2"
+    partition_name: "ibp-2"
   switches: [pod-3, pod-4]
 - name: pod-1
   metadata:
-    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b"
-    pod_id: "ca6b3558-e3bf-fad1-2748-73582365f740"
+    partition_id: "ibp-1"
+    pod_id: "pod-1"
   capacity_blocks: [CB1]
 - name: pod-2
   metadata:
-    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b"
-    pod_id: "ca6b3558-e3bf-fad1-2748-73582365f741"
+    partition_id: "ibp-1"
+    pod_id: "pod-2"
   capacity_blocks: [CB2]
 - name: pod-3
   metadata:
-    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8c"
-    pod_id: "ca6b3558-e3bf-fad1-2748-73582365f742"
+    partition_id: "ibp-2"
+    pod_id: "pod-3"
   capacity_blocks: [CB3]
 - name: pod-4
   metadata:
-    partition_id: "76034b3f-a826-4fb5-8a76-9afd8bc9fa8c"
-    pod_id: "ca6b3558-e3bf-fad1-2748-73582365f743"
+    partition_id: "ibp-2"
+    pod_id: "pod-4"
   capacity_blocks: [CB4]
 capacity_blocks:
 - name: CB1
   type: H100
-  nodes: [a1b2c3d4-1111-1111-1111-111111111111, a1b2c3d4-1111-1111-1111-111111111112, a1b2c3d4-1111-1111-1111-111111111113, a1b2c3d4-1111-1111-1111-111111111114]
+  nodes: [vm-11, vm-12, vm-13, vm-14]
 - name: CB2
   type: H100
-  nodes: [a1b2c3d4-2222-2222-2222-222222222221, a1b2c3d4-2222-2222-2222-222222222222, a1b2c3d4-2222-2222-2222-222222222223, a1b2c3d4-2222-2222-2222-222222222224]
+  nodes: [vm-21, vm-22, vm-23, vm-24]
 - name: CB3
   type: H100
-  nodes: [a1b2c3d4-3333-3333-3333-333333333331, a1b2c3d4-3333-3333-3333-333333333332, a1b2c3d4-3333-3333-3333-333333333333, a1b2c3d4-3333-3333-3333-333333333334]
+  nodes: [vm-31, vm-32, vm-33, vm-34]
 - name: CB4
   type: H100
-  nodes: [a1b2c3d4-4444-4444-4444-444444444441, a1b2c3d4-4444-4444-4444-444444444442, a1b2c3d4-4444-4444-4444-444444444443, a1b2c3d4-4444-4444-4444-444444444444]
+  nodes: [vm-41, vm-42, vm-43, vm-44]

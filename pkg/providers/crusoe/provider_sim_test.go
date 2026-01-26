@@ -19,27 +19,15 @@ import (
 func TestProviderSim(t *testing.T) {
 	ctx := context.Background()
 
-	// Helper to create instances map with all 16 nodes
+	// All 16 nodes matching the diagram in crusoe-small.yaml
 	allInstances := []topology.ComputeInstances{
 		{
 			Region: "local",
 			Instances: map[string]string{
-				"a1b2c3d4-1111-1111-1111-111111111111": "a1b2c3d4-1111-1111-1111-111111111111",
-				"a1b2c3d4-1111-1111-1111-111111111112": "a1b2c3d4-1111-1111-1111-111111111112",
-				"a1b2c3d4-1111-1111-1111-111111111113": "a1b2c3d4-1111-1111-1111-111111111113",
-				"a1b2c3d4-1111-1111-1111-111111111114": "a1b2c3d4-1111-1111-1111-111111111114",
-				"a1b2c3d4-2222-2222-2222-222222222221": "a1b2c3d4-2222-2222-2222-222222222221",
-				"a1b2c3d4-2222-2222-2222-222222222222": "a1b2c3d4-2222-2222-2222-222222222222",
-				"a1b2c3d4-2222-2222-2222-222222222223": "a1b2c3d4-2222-2222-2222-222222222223",
-				"a1b2c3d4-2222-2222-2222-222222222224": "a1b2c3d4-2222-2222-2222-222222222224",
-				"a1b2c3d4-3333-3333-3333-333333333331": "a1b2c3d4-3333-3333-3333-333333333331",
-				"a1b2c3d4-3333-3333-3333-333333333332": "a1b2c3d4-3333-3333-3333-333333333332",
-				"a1b2c3d4-3333-3333-3333-333333333333": "a1b2c3d4-3333-3333-3333-333333333333",
-				"a1b2c3d4-3333-3333-3333-333333333334": "a1b2c3d4-3333-3333-3333-333333333334",
-				"a1b2c3d4-4444-4444-4444-444444444441": "a1b2c3d4-4444-4444-4444-444444444441",
-				"a1b2c3d4-4444-4444-4444-444444444442": "a1b2c3d4-4444-4444-4444-444444444442",
-				"a1b2c3d4-4444-4444-4444-444444444443": "a1b2c3d4-4444-4444-4444-444444444443",
-				"a1b2c3d4-4444-4444-4444-444444444444": "a1b2c3d4-4444-4444-4444-444444444444",
+				"vm-11": "vm-11", "vm-12": "vm-12", "vm-13": "vm-13", "vm-14": "vm-14",
+				"vm-21": "vm-21", "vm-22": "vm-22", "vm-23": "vm-23", "vm-24": "vm-24",
+				"vm-31": "vm-31", "vm-32": "vm-32", "vm-33": "vm-33", "vm-34": "vm-34",
+				"vm-41": "vm-41", "vm-42": "vm-42", "vm-43": "vm-43", "vm-44": "vm-44",
 			},
 		},
 	}
@@ -58,18 +46,18 @@ func TestProviderSim(t *testing.T) {
 			modelFile: "../../../tests/models/crusoe-small.yaml",
 			params:    map[string]any{"plugin": "topology/tree"},
 			instances: allInstances,
-			topology: `# 76034b3f-a826-4fb5-8a76-9afd8bc9fa8b=76034b3f-a826-4fb5-8a76-9afd8bc9fa8b
-SwitchName=76034b3f-a826-4fb5-8a76-9afd8bc9fa8b Switches=pod-ca6b3558-e3bf-fad1-2748-73582365f[740-741]
-# 76034b3f-a826-4fb5-8a76-9afd8bc9fa8c=76034b3f-a826-4fb5-8a76-9afd8bc9fa8c
-SwitchName=76034b3f-a826-4fb5-8a76-9afd8bc9fa8c Switches=pod-ca6b3558-e3bf-fad1-2748-73582365f[742-743]
-# pod-ca6b3558-e3bf-fad1-2748-73582365f740=ca6b3558-e3bf-fad1-2748-73582365f740
-SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f740 Nodes=a1b2c3d4-1111-1111-1111-[111111111111-111111111114]
-# pod-ca6b3558-e3bf-fad1-2748-73582365f741=ca6b3558-e3bf-fad1-2748-73582365f741
-SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f741 Nodes=a1b2c3d4-2222-2222-2222-[222222222221-222222222224]
-# pod-ca6b3558-e3bf-fad1-2748-73582365f742=ca6b3558-e3bf-fad1-2748-73582365f742
-SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f742 Nodes=a1b2c3d4-3333-3333-3333-[333333333331-333333333334]
-# pod-ca6b3558-e3bf-fad1-2748-73582365f743=ca6b3558-e3bf-fad1-2748-73582365f743
-SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f743 Nodes=a1b2c3d4-4444-4444-4444-[444444444441-444444444444]
+			topology: `# ibp-1=ibp-1
+SwitchName=ibp-1 Switches=pod-pod-[1-2]
+# ibp-2=ibp-2
+SwitchName=ibp-2 Switches=pod-pod-[3-4]
+# pod-pod-1=pod-1
+SwitchName=pod-pod-1 Nodes=vm-[11-14]
+# pod-pod-2=pod-2
+SwitchName=pod-pod-2 Nodes=vm-[21-24]
+# pod-pod-3=pod-3
+SwitchName=pod-pod-3 Nodes=vm-[31-34]
+# pod-pod-4=pod-4
+SwitchName=pod-pod-4 Nodes=vm-[41-44]
 `,
 		},
 		{
@@ -80,18 +68,16 @@ SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f743 Nodes=a1b2c3d4-4444-4444-444
 				{
 					Region: "local",
 					Instances: map[string]string{
-						"a1b2c3d4-1111-1111-1111-111111111111": "a1b2c3d4-1111-1111-1111-111111111111",
-						"a1b2c3d4-1111-1111-1111-111111111112": "a1b2c3d4-1111-1111-1111-111111111112",
-						"a1b2c3d4-2222-2222-2222-222222222221": "a1b2c3d4-2222-2222-2222-222222222221",
+						"vm-11": "vm-11", "vm-12": "vm-12", "vm-21": "vm-21",
 					},
 				},
 			},
-			topology: `# 76034b3f-a826-4fb5-8a76-9afd8bc9fa8b=76034b3f-a826-4fb5-8a76-9afd8bc9fa8b
-SwitchName=76034b3f-a826-4fb5-8a76-9afd8bc9fa8b Switches=pod-ca6b3558-e3bf-fad1-2748-73582365f[740-741]
-# pod-ca6b3558-e3bf-fad1-2748-73582365f740=ca6b3558-e3bf-fad1-2748-73582365f740
-SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f740 Nodes=a1b2c3d4-1111-1111-1111-[111111111111-111111111112]
-# pod-ca6b3558-e3bf-fad1-2748-73582365f741=ca6b3558-e3bf-fad1-2748-73582365f741
-SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f741 Nodes=a1b2c3d4-2222-2222-2222-222222222221
+			topology: `# ibp-1=ibp-1
+SwitchName=ibp-1 Switches=pod-pod-[1-2]
+# pod-pod-1=pod-1
+SwitchName=pod-pod-1 Nodes=vm-[11-12]
+# pod-pod-2=pod-2
+SwitchName=pod-pod-2 Nodes=vm-21
 `,
 		},
 		{
@@ -100,11 +86,11 @@ SwitchName=pod-ca6b3558-e3bf-fad1-2748-73582365f741 Nodes=a1b2c3d4-2222-2222-222
 			instances: []topology.ComputeInstances{
 				{
 					Region:    "region1",
-					Instances: map[string]string{"a1b2c3d4-1111-1111-1111-111111111111": "node1"},
+					Instances: map[string]string{"vm-11": "vm-11"},
 				},
 				{
 					Region:    "region2",
-					Instances: map[string]string{"a1b2c3d4-2222-2222-2222-222222222221": "node2"},
+					Instances: map[string]string{"vm-21": "vm-21"},
 				},
 			},
 			err: "Crusoe does not support multi-region topology requests",
