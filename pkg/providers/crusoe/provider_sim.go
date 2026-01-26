@@ -13,7 +13,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/NVIDIA/topograph/internal/httperr"
-	"github.com/NVIDIA/topograph/internal/models"
+	"github.com/NVIDIA/topograph/pkg/models"
 	"github.com/NVIDIA/topograph/pkg/providers"
 	"github.com/NVIDIA/topograph/pkg/topology"
 )
@@ -30,12 +30,17 @@ func NamedLoaderSim() (string, providers.Loader) {
 
 // LoaderSim creates simulation provider from YAML model
 func LoaderSim(ctx context.Context, config providers.Config) (providers.Provider, *httperr.Error) {
-	model, err := models.LoadModel(config.ModelFile)
+	simParams, err := providers.GetSimulationParams(config.Params)
+	if err != nil {
+		return nil, httperr.NewError(http.StatusBadRequest, err.Error())
+	}
+
+	model, err := models.NewModelFromFile(simParams.ModelPath)
 	if err != nil {
 		return nil, httperr.NewError(http.StatusBadRequest, fmt.Sprintf("failed to load model: %v", err))
 	}
 
-	klog.Infof("Created Crusoe simulation provider from model: %s", config.ModelFile)
+	klog.Infof("Created Crusoe simulation provider from model: %s", simParams.ModelPath)
 	return NewSim(model), nil
 }
 
@@ -87,10 +92,10 @@ func (p *ProviderSim) buildTopologyFromModel(instances []topology.ComputeInstanc
 			continue
 		}
 
-		// Extract topology labels from switch metadata
-		partitionID, switchID, err := extractSimTopologyLabels(podSwitch.Metadata)
+		// Extract topology labels from pod metadata
+		partitionID, podID, err := extractSimTopologyLabels(podSwitch.Metadata)
 		if err != nil {
-			klog.V(4).Infof("Switch %q missing topology metadata: %v", podSwitch.Name, err)
+			klog.V(4).Infof("Pod %q missing topology metadata: %v", podSwitch.Name, err)
 			stats.badLabels++
 			continue
 		}
@@ -108,11 +113,11 @@ func (p *ProviderSim) buildTopologyFromModel(instances []topology.ComputeInstanc
 			instance := &topology.InstanceTopology{
 				InstanceID:     nodeName,
 				DatacenterID:   partitionID,
-				SpineID:        switchID,
-				BlockID:        switchID,
+				SpineID:        podID,
+				BlockID:        "",  // Empty for 2-tier topology (partition -> pod -> nodes)
 				DatacenterName: partitionID,
-				SpineName:      "switch-" + switchID,
-				BlockName:      "switch-" + switchID,
+				SpineName:      "pod-" + podID,
+				BlockName:      "",
 			}
 
 			topo.Append(instance)
@@ -141,35 +146,35 @@ func (p *ProviderSim) findPodForCapacityBlock(cbName string) *models.Switch {
 		// Check if this switch has capacity blocks (it's a pod switch)
 		for _, cb := range sw.CapacityBlocks {
 			if cb == cbName {
-				return &sw
+				return sw
 			}
 		}
 	}
 	return nil
 }
 
-// extractSimTopologyLabels extracts partition_id and switch_id from switch metadata
-func extractSimTopologyLabels(metadata map[string]string) (partitionID, switchID string, err error) {
+// extractSimTopologyLabels extracts partition_id and pod_id from switch metadata
+func extractSimTopologyLabels(metadata map[string]string) (partitionID, podID string, err error) {
 	partitionID, ok := metadata["partition_id"]
 	if !ok || len(partitionID) == 0 {
 		return "", "", fmt.Errorf("missing or empty metadata key 'partition_id'")
 	}
 
-	switchID, ok = metadata["switch_id"]
-	if !ok || len(switchID) == 0 {
-		return "", "", fmt.Errorf("missing or empty metadata key 'switch_id'")
+	podID, ok = metadata["pod_id"]
+	if !ok || len(podID) == 0 {
+		return "", "", fmt.Errorf("missing or empty metadata key 'pod_id'")
 	}
 
-	return partitionID, switchID, nil
+	return partitionID, podID, nil
 }
 
 // GetComputeInstances extracts all compute instances from the model
 func (p *ProviderSim) GetComputeInstances(ctx context.Context) ([]topology.ComputeInstances, *httperr.Error) {
-	instances := make(map[string]struct{})
+	instances := make(map[string]string)
 
 	for _, cb := range p.model.CapacityBlocks {
 		for _, node := range cb.Nodes {
-			instances[node] = struct{}{}
+			instances[node] = node
 		}
 	}
 
