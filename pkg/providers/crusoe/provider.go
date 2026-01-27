@@ -133,3 +133,14 @@ func (p *Provider) GetInstancesRegions(ctx context.Context, nodes []string) (map
 	}
 	return result, nil
 }
+
+// GetNodeAnnotations returns annotations required by slinky engine.
+// For Crusoe, instance ID = node name and region = "local".
+// Topology info comes from K8s labels (crusoe.ai/ib.partition.id, crusoe.ai/pod.id).
+func GetNodeAnnotations(ctx context.Context, nodeName string) (map[string]string, error) {
+	return map[string]string{
+		topology.KeyNodeInstance: nodeName,
+		topology.KeyNodeRegion:   "local",
+	}, nil
+}
+

@@ -30,6 +30,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/NVIDIA/topograph/pkg/providers/aws"
+	"github.com/NVIDIA/topograph/pkg/providers/crusoe"
 	"github.com/NVIDIA/topograph/pkg/providers/dra"
 	"github.com/NVIDIA/topograph/pkg/providers/gcp"
 	"github.com/NVIDIA/topograph/pkg/providers/infiniband"
@@ -99,6 +100,8 @@ func getAnnotations(ctx context.Context, client *kubernetes.Clientset, config *r
 	switch provider {
 	case aws.NAME:
 		return aws.GetNodeAnnotations(ctx)
+	case crusoe.NAME:
+		return crusoe.GetNodeAnnotations(ctx, nodeName)
 	case gcp.NAME:
 		return gcp.GetNodeAnnotations(ctx)
 	case oci.NAME:
