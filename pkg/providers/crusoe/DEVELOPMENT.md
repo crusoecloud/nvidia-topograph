@@ -118,6 +118,11 @@ SwitchName=pod-def456 Nodes=node-5,node-6,node-7,node-8
 
 ### Docker build fails on Mac
 
-Add the platfrom to build linux amd64 image:
+Error:
+```
+/usr/local/go/pkg/tool/linux_amd64/compile: signal: segmentation fault (core dumped)
+```
+
+Add the platfrom to Dockerfile:
 
 `FROM --platform=linux/arm64 golang:1.24.7 AS builder`
