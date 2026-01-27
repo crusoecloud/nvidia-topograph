@@ -9,6 +9,29 @@ Crusoe uses a 2-tier topology:
 - **Tier 1 (Partition)**: IB partition boundary (`crusoe.ai/ib.partition.id`) - jobs cannot cross partitions
 - **Tier 2 (Pod)**: Leaf switch grouping (`crusoe.ai/pod.id`) - better performance within same pod
 
+## How It Works
+
+```mermaid
+flowchart LR
+    NO[Node Observer] -->|triggers| TG[Topograph]
+    TG -->|queries| CP[Crusoe Provider]
+    CP -->|reads labels| K8S[(K8s Nodes)]
+    TG -->|writes| CM[slurm-topology ConfigMap]
+    CM -->|mounts as topology.conf| SW[SLURM Workers]
+```
+
+1. **Node Observer** watches for SLURM worker pod changes (add/remove)
+2. **Topograph** receives trigger, queries K8s nodes via the **Crusoe Provider**
+3. **Crusoe Provider** reads `crusoe.ai/ib.partition.id` and `crusoe.ai/pod.id` labels from nodes
+4. **Topograph** generates SLURM topology config and writes to `slurm-topology` ConfigMap
+5. **SLURM Workers** mount the ConfigMap as `/etc/slurm/topology.conf`
+
+See [Deploy Topograph](#deploy-topograph) for setup instructions.
+
+### Why a Separate ConfigMap?
+
+The slinky-operator manages its own ConfigMap (`slurm-*-config`) and continuously reconciles it, overwriting external changes. Topograph writes to a **separate** ConfigMap (`slurm-topology`) to avoid this conflict. The crusoe-slurm-operator mounts this ConfigMap into worker pods.
+
 ## Testing
 
 > **Note**: The `slinky` engine requires in-cluster config (`rest.InClusterConfig()`) with no kubeconfig fallback. Test locally with simulation, then deploy to cluster for integration testing.
