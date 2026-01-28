@@ -5,7 +5,11 @@ name: Docker
 # separate terms of service, privacy policy, and support
 # documentation.
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - crusoe-topo
 
 env:
   REGISTRY: ghcr.io
@@ -19,6 +23,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Need full history for commit count
+
+      - name: Calculate version
+        id: version
+        run: |
+          BASE_VERSION=$(cat VERSION 2>/dev/null || echo "1.0.0")
+          # Count commits on this branch since it diverged from main
+          BUILD_NUM=$(git rev-list --count HEAD)
+          VERSION="v${BASE_VERSION}-crusoe.${BUILD_NUM}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Generated version: ${VERSION}"
 
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
@@ -37,9 +55,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}
             type=ref,event=branch
             type=sha,priority=100,prefix=,suffix=,format=short
 
