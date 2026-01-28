@@ -1,0 +1,68 @@
+# Crusoe 2-Tier Topology Model
+#
+# Tier 1: Partitions (physical InfiniBand isolation boundaries)
+# Tier 2: Pods (leaf switches)
+#
+#                 _________ crusoe _________
+#                /                          \
+#           ibp-1                           ibp-2
+#          /     \                         /     \
+#       pod-1   pod-2                  pod-3   pod-4
+#         |       |                      |       |
+#      -------  -------               -------  -------
+#     | vm-11 || vm-21 |             | vm-31 || vm-41 |
+#     | vm-12 || vm-22 |             | vm-32 || vm-42 |
+#     | vm-13 || vm-23 |             | vm-33 || vm-43 |
+#     | vm-14 || vm-24 |             | vm-34 || vm-44 |
+#      -------  -------               -------  -------
+#        CB1      CB2                   CB3      CB4
+#
+# Label format matches actual Crusoe nodes:
+#   crusoe.ai/ib.partition.id=<UUID>
+#   crusoe.ai/ib.partition.name=<readable name>
+#   crusoe.ai/pod.id=<UUID>
+#
+switches:
+- name: ibp-1
+  metadata:
+    partition_id: "ibp-1"
+    partition_name: "ibp-1"
+  switches: [pod-1, pod-2]
+- name: ibp-2
+  metadata:
+    partition_id: "ibp-2"
+    partition_name: "ibp-2"
+  switches: [pod-3, pod-4]
+- name: pod-1
+  metadata:
+    partition_id: "ibp-1"
+    pod_id: "pod-1"
+  capacity_blocks: [CB1]
+- name: pod-2
+  metadata:
+    partition_id: "ibp-1"
+    pod_id: "pod-2"
+  capacity_blocks: [CB2]
+- name: pod-3
+  metadata:
+    partition_id: "ibp-2"
+    pod_id: "pod-3"
+  capacity_blocks: [CB3]
+- name: pod-4
+  metadata:
+    partition_id: "ibp-2"
+    pod_id: "pod-4"
+  capacity_blocks: [CB4]
+capacity_blocks:
+- name: CB1
+  type: H100
+  nodes: [vm-11, vm-12, vm-13, vm-14]
+- name: CB2
+  type: H100
+  nodes: [vm-21, vm-22, vm-23, vm-24]
+- name: CB3
+  type: H100
+  nodes: [vm-31, vm-32, vm-33, vm-34]
+- name: CB4
+  type: H100
+  nodes: [vm-41, vm-42, vm-43, vm-44]
