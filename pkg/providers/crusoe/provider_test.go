@@ -20,11 +20,15 @@ func TestGetParameters(t *testing.T) {
 		err      string
 	}{
 		{
-			name:   "Case 1: empty parameters",
+			name:   "Case 1: empty parameters uses default node selector",
 			params: map[string]any{},
 			expected: &Params{
-				NodeSelector: nil,
-				nodeListOpt:  nil,
+				NodeSelector: map[string]string{
+					"slurm.crusoe.ai/compute-node-type": "true",
+				},
+				nodeListOpt: &metav1.ListOptions{
+					LabelSelector: "slurm.crusoe.ai/compute-node-type=true",
+				},
 			},
 		},
 		{

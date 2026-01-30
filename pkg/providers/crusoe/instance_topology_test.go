@@ -121,7 +121,6 @@ func TestBuildInstanceTopology(t *testing.T) {
 		name     string
 		node     corev1.Node
 		expected *topology.InstanceTopology
-		errMsg   string
 	}{
 		{
 			name: "valid node with all labels",
@@ -145,51 +144,87 @@ func TestBuildInstanceTopology(t *testing.T) {
 			},
 		},
 		{
-			name: "missing partition label",
+			name: "missing partition label falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "node-1",
+					Name: "cpu-node-1",
 					Labels: map[string]string{
 						"crusoe.ai/pod.id": "pod-123",
 					},
 				},
 			},
-			errMsg: "missing or empty label",
+			expected: &topology.InstanceTopology{
+				InstanceID:     "cpu-node-1",
+				DatacenterID:   DefaultCPUPartition,
+				SpineID:        DefaultCPUPod,
+				BlockID:        "",
+				DatacenterName: DefaultCPUPartition,
+				SpineName:      "pod-" + DefaultCPUPod,
+				BlockName:      "",
+			},
 		},
 		{
-			name: "missing pod label",
+			name: "missing pod label falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "node-1",
+					Name: "cpu-node-2",
 					Labels: map[string]string{
 						"crusoe.ai/ib.partition.id": "partition-abc",
 					},
 				},
 			},
-			errMsg: "missing or empty label",
+			expected: &topology.InstanceTopology{
+				InstanceID:     "cpu-node-2",
+				DatacenterID:   DefaultCPUPartition,
+				SpineID:        DefaultCPUPod,
+				BlockID:        "",
+				DatacenterName: DefaultCPUPartition,
+				SpineName:      "pod-" + DefaultCPUPod,
+				BlockName:      "",
+			},
 		},
 		{
-			name: "empty labels",
+			name: "empty labels falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "node-1",
+					Name:   "cpu-node-3",
 					Labels: map[string]string{},
 				},
 			},
-			errMsg: "missing or empty label",
+			expected: &topology.InstanceTopology{
+				InstanceID:     "cpu-node-3",
+				DatacenterID:   DefaultCPUPartition,
+				SpineID:        DefaultCPUPod,
+				BlockID:        "",
+				DatacenterName: DefaultCPUPartition,
+				SpineName:      "pod-" + DefaultCPUPod,
+				BlockName:      "",
+			},
+		},
+		{
+			name: "nil labels falls back to CPU partition",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "cpu-node-4",
+					Labels: nil,
+				},
+			},
+			expected: &topology.InstanceTopology{
+				InstanceID:     "cpu-node-4",
+				DatacenterID:   DefaultCPUPartition,
+				SpineID:        DefaultCPUPod,
+				BlockID:        "",
+				DatacenterName: DefaultCPUPartition,
+				SpineName:      "pod-" + DefaultCPUPod,
+				BlockName:      "",
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := buildInstanceTopology(tc.node)
-			if tc.errMsg != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.errMsg)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expected, result)
-			}
+			result := buildInstanceTopology(tc.node)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }

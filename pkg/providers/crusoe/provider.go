@@ -37,11 +37,16 @@ type Provider struct {
 
 // Params holds optional configuration for filtering K8s nodes
 type Params struct {
-	// NodeSelector (optional) filters nodes by labels (e.g., {"crusoe.ai/gpu": "h100"})
+	// NodeSelector filters nodes by labels (defaults to slurm.crusoe.ai/compute-node-type=true)
 	NodeSelector map[string]string `mapstructure:"nodeSelector"`
 
 	// nodeListOpt is derived from NodeSelector for K8s API calls
 	nodeListOpt *metav1.ListOptions
+}
+
+// Default node selector - only process nodes marked as SLURM compute nodes
+var defaultNodeSelector = map[string]string{
+	"slurm.crusoe.ai/compute-node-type": "true",
 }
 
 func NamedLoader() (string, providers.Loader) {
@@ -78,12 +83,17 @@ func getParameters(params map[string]any) (*Params, error) {
 		return nil, err
 	}
 
+	// Use default node selector if none provided
+	if len(p.NodeSelector) == 0 {
+		p.NodeSelector = defaultNodeSelector
+		klog.Infof("Using default node selector: %v", p.NodeSelector)
+	} else {
+		klog.Infof("Using configured node selector: %v", p.NodeSelector)
+	}
+
 	// Convert NodeSelector map to K8s label selector string for API calls
-	if len(p.NodeSelector) != 0 {
-		p.nodeListOpt = &metav1.ListOptions{
-			LabelSelector: labels.Set(p.NodeSelector).String(),
-		}
-		klog.Infof("Using node selector: %v", p.NodeSelector)
+	p.nodeListOpt = &metav1.ListOptions{
+		LabelSelector: labels.Set(p.NodeSelector).String(),
 	}
 
 	return p, nil
