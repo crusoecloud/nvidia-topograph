@@ -50,13 +50,7 @@ func (p *baseProvider) generateInstanceTopology(ctx context.Context, instances [
 			continue
 		}
 
-		instance, err := buildInstanceTopology(node)
-		if err != nil {
-			klog.V(4).Infof("Node %q skipped: %v", node.Name, err)
-			stats.badLabels++
-			continue
-		}
-
+		instance := buildInstanceTopology(node)
 		topo.Append(instance)
 		stats.success++
 	}
@@ -102,11 +96,15 @@ func shouldSkipNode(nodeName string, requestedIDs map[string]struct{}) bool {
 	return !exists
 }
 
-// buildInstanceTopology constructs topology object from node labels
-func buildInstanceTopology(node corev1.Node) (*topology.InstanceTopology, error) {
+// buildInstanceTopology constructs topology object from node labels.
+// Nodes without IB labels are assigned to a default CPU partition.
+func buildInstanceTopology(node corev1.Node) *topology.InstanceTopology {
 	partition, podID, err := extractTopologyLabels(node.Labels)
 	if err != nil {
-		return nil, err
+		// Fallback: nodes without IB labels go to CPU partition
+		klog.V(4).Infof("Node %q missing IB labels, using CPU partition", node.Name)
+		partition = DefaultCPUPartition
+		podID = DefaultCPUPod
 	}
 
 	return &topology.InstanceTopology{
@@ -117,7 +115,7 @@ func buildInstanceTopology(node corev1.Node) (*topology.InstanceTopology, error)
 		DatacenterName: partition,
 		SpineName:      "pod-" + podID,
 		BlockName:      "",
-	}, nil
+	}
 }
 
 // resolveEmptyTopologyError determines the correct error based on why the result was empty
