@@ -19,8 +19,8 @@ import (
 func TestProviderSim(t *testing.T) {
 	ctx := context.Background()
 
-	// All 16 nodes matching the diagram in crusoe-small.yaml
-	allInstances := []topology.ComputeInstances{
+	// All 16 GPU nodes matching the diagram in crusoe-small.yaml
+	allGPUInstances := []topology.ComputeInstances{
 		{
 			Region: "local",
 			Instances: map[string]string{
@@ -28,6 +28,20 @@ func TestProviderSim(t *testing.T) {
 				"vm-21": "vm-21", "vm-22": "vm-22", "vm-23": "vm-23", "vm-24": "vm-24",
 				"vm-31": "vm-31", "vm-32": "vm-32", "vm-33": "vm-33", "vm-34": "vm-34",
 				"vm-41": "vm-41", "vm-42": "vm-42", "vm-43": "vm-43", "vm-44": "vm-44",
+			},
+		},
+	}
+
+	// Mixed GPU + CPU instances
+	mixedInstances := []topology.ComputeInstances{
+		{
+			Region: "local",
+			Instances: map[string]string{
+				// GPU nodes (have IB labels)
+				"vm-11": "vm-11", "vm-12": "vm-12",
+				"vm-21": "vm-21",
+				// CPU nodes (no IB labels - fall back to cpu-network/cpu-partition/cpu-pod)
+				"cpu-01": "cpu-01", "cpu-02": "cpu-02",
 			},
 		},
 	}
@@ -42,14 +56,17 @@ func TestProviderSim(t *testing.T) {
 		err       string
 	}{
 		{
-			name:      "Case 1: valid 2-partition topology with all instances",
+			name:      "Case 1: valid 3-tier topology with all GPU instances",
 			modelFile: "../../../tests/models/crusoe-small.yaml",
 			params:    map[string]any{"plugin": "topology/tree"},
-			instances: allInstances,
-			topology: `# ibp-1=ibp-1
-SwitchName=ibp-1 Switches=pod-pod-[1-2]
-# ibp-2=ibp-2
-SwitchName=ibp-2 Switches=pod-pod-[3-4]
+			instances: allGPUInstances,
+			// Common datacenter "crusoe" enables cross-partition scheduling
+			topology: `# crusoe=crusoe
+SwitchName=crusoe Switches=partition-ibp-[1-2]
+# partition-ibp-1=ibp-1
+SwitchName=partition-ibp-1 Switches=pod-pod-[1-2]
+# partition-ibp-2=ibp-2
+SwitchName=partition-ibp-2 Switches=pod-pod-[3-4]
 # pod-pod-1=pod-1
 SwitchName=pod-pod-1 Nodes=vm-[11-14]
 # pod-pod-2=pod-2
@@ -58,6 +75,26 @@ SwitchName=pod-pod-2 Nodes=vm-[21-24]
 SwitchName=pod-pod-3 Nodes=vm-[31-34]
 # pod-pod-4=pod-4
 SwitchName=pod-pod-4 Nodes=vm-[41-44]
+`,
+		},
+		{
+			name:      "Case 1b: mixed GPU + CPU topology",
+			modelFile: "../../../tests/models/crusoe-small.yaml",
+			params:    map[string]any{"plugin": "topology/tree"},
+			instances: mixedInstances,
+			// Common datacenter "crusoe" contains both GPU partitions and CPU partition
+			topology: `# crusoe=crusoe
+SwitchName=crusoe Switches=partition-cpu-partition,partition-ibp-1
+# partition-cpu-partition=cpu-partition
+SwitchName=partition-cpu-partition Switches=pod-cpu-pod
+# partition-ibp-1=ibp-1
+SwitchName=partition-ibp-1 Switches=pod-pod-[1-2]
+# pod-cpu-pod=cpu-pod
+SwitchName=pod-cpu-pod Nodes=cpu-[01-02]
+# pod-pod-1=pod-1
+SwitchName=pod-pod-1 Nodes=vm-[11-12]
+# pod-pod-2=pod-2
+SwitchName=pod-pod-2 Nodes=vm-21
 `,
 		},
 		{
@@ -72,8 +109,10 @@ SwitchName=pod-pod-4 Nodes=vm-[41-44]
 					},
 				},
 			},
-			topology: `# ibp-1=ibp-1
-SwitchName=ibp-1 Switches=pod-pod-[1-2]
+			topology: `# crusoe=crusoe
+SwitchName=crusoe Switches=partition-ibp-1
+# partition-ibp-1=ibp-1
+SwitchName=partition-ibp-1 Switches=pod-pod-[1-2]
 # pod-pod-1=pod-1
 SwitchName=pod-pod-1 Nodes=vm-[11-12]
 # pod-pod-2=pod-2
@@ -153,5 +192,5 @@ func TestProviderSim_GetComputeInstances(t *testing.T) {
 	require.Nil(t, httpErr)
 	require.Len(t, instances, 1)
 	require.Equal(t, "local", instances[0].Region)
-	require.Len(t, instances[0].Instances, 16) // 4 switches * 4 VMs each
+	require.Len(t, instances[0].Instances, 20) // 4 GPU switches * 4 VMs each + 4 CPU nodes
 }

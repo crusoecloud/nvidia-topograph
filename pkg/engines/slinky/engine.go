@@ -158,6 +158,15 @@ func (eng *SlinkyEngine) GetComputeInstances(ctx context.Context, _ engines.Envi
 		nodeMap[pod.Spec.NodeName] = host
 	}
 
+	// Fallback: if no pods found, return dummy topology to bootstrap SLURM
+	if len(nodeMap) == 0 {
+		klog.Infof("No SLURM worker pods found - generating dummy topology for bootstrap")
+		return []topology.ComputeInstances{{
+			Region:    "bootstrap",
+			Instances: map[string]string{"ALL": "bootstrap-node"},
+		}}, nil
+	}
+
 	return getComputeInstances(nodes, nodeMap)
 }
 

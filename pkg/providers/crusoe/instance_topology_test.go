@@ -123,100 +123,150 @@ func TestBuildInstanceTopology(t *testing.T) {
 		expected *topology.InstanceTopology
 	}{
 		{
-			name: "valid node with all labels",
+			name: "valid GPU node with all 3 labels (UUIDs)",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "node-1",
+					Name: "gpu-node-1",
 					Labels: map[string]string{
-						"crusoe.ai/ib.partition.id": "partition-abc",
+						"crusoe.ai/ib.partition.id": "b2c3d4e5-5555-6666-7777-888899990000",
+						"crusoe.ai/pod.id":          "c3d4e5f6-aaaa-bbbb-cccc-ddddeeeeffff",
+					},
+				},
+			},
+			expected: &topology.InstanceTopology{
+				InstanceID:     "gpu-node-1",
+				DatacenterID:   DefaultDatacenter,                                   // L1: crusoe (common root)
+				SpineID:        "b2c3d4e5-5555-6666-7777-888899990000",              // L2: Partition
+				BlockID:        "c3d4e5f6-aaaa-bbbb-cccc-ddddeeeeffff",              // L3: Pod
+				DatacenterName: DefaultDatacenter,
+				SpineName:      "partition-b2c3d4e5-5555-6666-7777-888899990000",
+				BlockName:      "pod-c3d4e5f6-aaaa-bbbb-cccc-ddddeeeeffff",
+				AcceleratorID:  "b2c3d4e5-5555-6666-7777-888899990000", // IB partition for high-speed domain
+			},
+		},
+		{
+			name: "GPU node with partition.name label",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gpu-node-3",
+					Labels: map[string]string{
+						"crusoe.ai/ib.partition.id":   "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b",
+						"crusoe.ai/ib.partition.name": "msi-h200-icat-ibp",
+						"crusoe.ai/pod.id":            "ca6b3558-e3bf-fad1-2748-73582365f740",
+					},
+				},
+			},
+			expected: &topology.InstanceTopology{
+				InstanceID:     "gpu-node-3",
+				DatacenterID:   DefaultDatacenter,
+				SpineID:        "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b",
+				BlockID:        "ca6b3558-e3bf-fad1-2748-73582365f740",
+				DatacenterName: DefaultDatacenter,
+				SpineName:      "partition-msi-h200-icat-ibp", // Uses full name label
+				BlockName:      "pod-ca6b3558-e3bf-fad1-2748-73582365f740",
+				AcceleratorID:  "76034b3f-a826-4fb5-8a76-9afd8bc9fa8b",
+			},
+		},
+		{
+			name: "node with both partition and pod labels (treated as GPU)",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "gpu-node-2",
+					Labels: map[string]string{
+						"crusoe.ai/ib.partition.id": "partition-def",
 						"crusoe.ai/pod.id":          "pod-123",
 					},
 				},
 			},
 			expected: &topology.InstanceTopology{
-				InstanceID:     "node-1",
-				DatacenterID:   "partition-abc",
-				SpineID:        "pod-123",
-				BlockID:        "",
-				DatacenterName: "partition-abc",
-				SpineName:      "pod-pod-123",
-				BlockName:      "",
+				InstanceID:     "gpu-node-2",
+				DatacenterID:   DefaultDatacenter,
+				SpineID:        "partition-def",                       // Uses partition ID
+				BlockID:        "pod-123",                            // Uses pod ID
+				DatacenterName: DefaultDatacenter,
+				SpineName:      "partition-partition-def",           // Truncated
+				BlockName:      "pod-pod-123",
+				AcceleratorID:  "partition-def",                     // IB partition for high-speed domain
 			},
 		},
 		{
 			name: "missing partition label falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "cpu-node-1",
+					Name: "cpu-node-2",
 					Labels: map[string]string{
 						"crusoe.ai/pod.id": "pod-123",
 					},
 				},
 			},
 			expected: &topology.InstanceTopology{
-				InstanceID:     "cpu-node-1",
-				DatacenterID:   DefaultCPUPartition,
-				SpineID:        DefaultCPUPod,
-				BlockID:        "",
-				DatacenterName: DefaultCPUPartition,
-				SpineName:      "pod-" + DefaultCPUPod,
-				BlockName:      "",
+				InstanceID:     "cpu-node-2",
+				DatacenterID:   DefaultDatacenter,
+				SpineID:        DefaultCPUPartition,
+				BlockID:        DefaultCPUPod,
+				DatacenterName: DefaultDatacenter,
+				SpineName:      DefaultCPUPartition,
+				BlockName:      DefaultCPUPod,
+				AcceleratorID:  "",
 			},
 		},
 		{
 			name: "missing pod label falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "cpu-node-2",
+					Name: "cpu-node-3",
 					Labels: map[string]string{
-						"crusoe.ai/ib.partition.id": "partition-abc",
+						"crusoe.ai/ib.partition.id": "partition-def",
 					},
 				},
 			},
 			expected: &topology.InstanceTopology{
-				InstanceID:     "cpu-node-2",
-				DatacenterID:   DefaultCPUPartition,
-				SpineID:        DefaultCPUPod,
-				BlockID:        "",
-				DatacenterName: DefaultCPUPartition,
-				SpineName:      "pod-" + DefaultCPUPod,
-				BlockName:      "",
+				InstanceID:     "cpu-node-3",
+				DatacenterID:   DefaultDatacenter,
+				SpineID:        DefaultCPUPartition,
+				BlockID:        DefaultCPUPod,
+				DatacenterName: DefaultDatacenter,
+				SpineName:      DefaultCPUPartition,
+				BlockName:      DefaultCPUPod,
+				AcceleratorID:  "",
 			},
 		},
 		{
 			name: "empty labels falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "cpu-node-3",
+					Name:   "cpu-node-4",
 					Labels: map[string]string{},
 				},
 			},
 			expected: &topology.InstanceTopology{
-				InstanceID:     "cpu-node-3",
-				DatacenterID:   DefaultCPUPartition,
-				SpineID:        DefaultCPUPod,
-				BlockID:        "",
-				DatacenterName: DefaultCPUPartition,
-				SpineName:      "pod-" + DefaultCPUPod,
-				BlockName:      "",
+				InstanceID:     "cpu-node-4",
+				DatacenterID:   DefaultDatacenter,
+				SpineID:        DefaultCPUPartition,
+				BlockID:        DefaultCPUPod,
+				DatacenterName: DefaultDatacenter,
+				SpineName:      DefaultCPUPartition,
+				BlockName:      DefaultCPUPod,
+				AcceleratorID:  "",
 			},
 		},
 		{
 			name: "nil labels falls back to CPU partition",
 			node: corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "cpu-node-4",
+					Name:   "cpu-node-5",
 					Labels: nil,
 				},
 			},
 			expected: &topology.InstanceTopology{
-				InstanceID:     "cpu-node-4",
-				DatacenterID:   DefaultCPUPartition,
-				SpineID:        DefaultCPUPod,
-				BlockID:        "",
-				DatacenterName: DefaultCPUPartition,
-				SpineName:      "pod-" + DefaultCPUPod,
-				BlockName:      "",
+				InstanceID:     "cpu-node-5",
+				DatacenterID:   DefaultDatacenter,
+				SpineID:        DefaultCPUPartition,
+				BlockID:        DefaultCPUPod,
+				DatacenterName: DefaultDatacenter,
+				SpineName:      DefaultCPUPartition,
+				BlockName:      DefaultCPUPod,
+				AcceleratorID:  "",
 			},
 		},
 	}
