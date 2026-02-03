@@ -87,17 +87,25 @@ func (p *ProviderSim) buildTopologyFromModel(instances []topology.ComputeInstanc
 	for _, cb := range p.model.CapacityBlocks {
 		// Find the pod this capacity block belongs to
 		podSwitch := p.findPodForCapacityBlock(cb.Name)
-		if podSwitch == nil {
-			klog.V(4).Infof("Capacity block %q has no parent pod switch, skipping", cb.Name)
-			continue
+
+		// Determine topology labels - GPU nodes have IB metadata, CPU nodes use defaults
+		var partitionID, partitionName, podID string
+		var isGPU bool
+
+		if podSwitch != nil {
+			var err error
+			partitionID, partitionName, podID, err = extractSimTopologyLabels(podSwitch.Metadata)
+			if err == nil {
+				isGPU = true
+			}
 		}
 
-		// Extract topology labels from pod metadata
-		partitionID, podID, err := extractSimTopologyLabels(podSwitch.Metadata)
-		if err != nil {
-			klog.V(4).Infof("Pod %q missing topology metadata: %v", podSwitch.Name, err)
-			stats.badLabels++
-			continue
+		// CPU nodes: no parent switch or missing IB metadata → use defaults
+		if !isGPU {
+			partitionID = DefaultCPUPartition
+			partitionName = DefaultCPUPartition
+			podID = DefaultCPUPod
+			klog.V(4).Infof("Capacity block %q has no IB metadata, using CPU defaults", cb.Name)
 		}
 
 		// Process nodes in this capacity block
@@ -110,14 +118,20 @@ func (p *ProviderSim) buildTopologyFromModel(instances []topology.ComputeInstanc
 				}
 			}
 
+			// All nodes share common datacenter "crusoe" for cross-partition scheduling
 			instance := &topology.InstanceTopology{
 				InstanceID:     nodeName,
-				DatacenterID:   partitionID,
-				SpineID:        podID,
-				BlockID:        "",  // Empty for 2-tier topology (partition -> pod -> nodes)
-				DatacenterName: partitionID,
-				SpineName:      "pod-" + podID,
-				BlockName:      "",
+				DatacenterID:   DefaultDatacenter,              // L1: crusoe (common root)
+				SpineID:        partitionID,                    // L2: Partition
+				BlockID:        podID,                          // L3: Pod
+				DatacenterName: DefaultDatacenter,
+				SpineName:      "partition-" + partitionName,
+				BlockName:      "pod-" + podID,
+			}
+
+			// Only GPU nodes get AcceleratorID (for topology/block)
+			if isGPU {
+				instance.AcceleratorID = partitionID
 			}
 
 			topo.Append(instance)
@@ -153,19 +167,26 @@ func (p *ProviderSim) findPodForCapacityBlock(cbName string) *models.Switch {
 	return nil
 }
 
-// extractSimTopologyLabels extracts partition_id and pod_id from switch metadata
-func extractSimTopologyLabels(metadata map[string]string) (partitionID, podID string, err error) {
+// extractSimTopologyLabels extracts topology metadata from switch
+// Returns (partitionID, partitionName, podID, error)
+func extractSimTopologyLabels(metadata map[string]string) (partitionID, partitionName, podID string, err error) {
 	partitionID, ok := metadata["partition_id"]
 	if !ok || len(partitionID) == 0 {
-		return "", "", fmt.Errorf("missing or empty metadata key 'partition_id'")
+		return "", "", "", fmt.Errorf("missing or empty metadata key 'partition_id'")
 	}
 
 	podID, ok = metadata["pod_id"]
 	if !ok || len(podID) == 0 {
-		return "", "", fmt.Errorf("missing or empty metadata key 'pod_id'")
+		return "", "", "", fmt.Errorf("missing or empty metadata key 'pod_id'")
 	}
 
-	return partitionID, podID, nil
+	// partition_name is optional, falls back to partition_id
+	partitionName = metadata["partition_name"]
+	if partitionName == "" {
+		partitionName = partitionID
+	}
+
+	return partitionID, partitionName, podID, nil
 }
 
 // GetComputeInstances extracts all compute instances from the model

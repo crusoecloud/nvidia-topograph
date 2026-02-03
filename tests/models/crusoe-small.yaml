@@ -1,55 +1,67 @@
-# Crusoe 2-Tier Topology Model
+# Crusoe 3-Tier Topology Model
 #
-# Tier 1: Partitions (physical InfiniBand isolation boundaries)
-# Tier 2: Pods (leaf switches)
+# All nodes share common datacenter root "crusoe" to enable cross-partition scheduling.
 #
-#                 _________ crusoe _________
-#                /                          \
-#           ibp-1                           ibp-2
-#          /     \                         /     \
-#       pod-1   pod-2                  pod-3   pod-4
-#         |       |                      |       |
-#      -------  -------               -------  -------
-#     | vm-11 || vm-21 |             | vm-31 || vm-41 |
-#     | vm-12 || vm-22 |             | vm-32 || vm-42 |
-#     | vm-13 || vm-23 |             | vm-33 || vm-43 |
-#     | vm-14 || vm-24 |             | vm-34 || vm-44 |
-#      -------  -------               -------  -------
-#        CB1      CB2                   CB3      CB4
+# Tier 1 (Datacenter): crusoe (common root for all nodes)
+# Tier 2 (Spine): IB Partitions (GPU) or cpu-partition (CPU fallback)
+# Tier 3 (Block): Pods (leaf switches)
+#
+#                      _____________ crusoe _____________
+#                     /          |          |           \
+#                ibp-1        ibp-2    cpu-partition    ...
+#               /     \      /     \        |
+#            pod-1   pod-2 pod-3  pod-4  cpu-pod
+#              |       |     |      |       |
+#           -------  -------  ...  ...  -----------
+#          | vm-11 || vm-21 |           | cpu-01    |
+#          | vm-12 || vm-22 |           | cpu-02    |
+#          | vm-13 || vm-23 |           | cpu-03    |
+#          | vm-14 || vm-24 |           | cpu-04    |
+#           -------  -------             -----------
+#             CB1      CB2                 CPU-CB
+#            (GPU)    (GPU)               (no IB)
 #
 # Label format matches actual Crusoe nodes:
-#   crusoe.ai/ib.partition.id=<UUID>
-#   crusoe.ai/ib.partition.name=<readable name>
-#   crusoe.ai/pod.id=<UUID>
+#   crusoe.ai/ib.partition.networkId=<UUID>  (GPU only)
+#   crusoe.ai/ib.partition.id=<UUID>         (GPU only)
+#   crusoe.ai/pod.id=<UUID>                  (GPU only)
+#
+# CPU nodes have NO topology labels and fall back to cpu-partition/cpu-pod
 #
 switches:
 - name: ibp-1
   metadata:
+    network_id: "network-1"
     partition_id: "ibp-1"
     partition_name: "ibp-1"
   switches: [pod-1, pod-2]
 - name: ibp-2
   metadata:
+    network_id: "network-1"
     partition_id: "ibp-2"
     partition_name: "ibp-2"
   switches: [pod-3, pod-4]
 - name: pod-1
   metadata:
+    network_id: "network-1"
     partition_id: "ibp-1"
     pod_id: "pod-1"
   capacity_blocks: [CB1]
 - name: pod-2
   metadata:
+    network_id: "network-1"
     partition_id: "ibp-1"
     pod_id: "pod-2"
   capacity_blocks: [CB2]
 - name: pod-3
   metadata:
+    network_id: "network-1"
     partition_id: "ibp-2"
     pod_id: "pod-3"
   capacity_blocks: [CB3]
 - name: pod-4
   metadata:
+    network_id: "network-1"
     partition_id: "ibp-2"
     pod_id: "pod-4"
   capacity_blocks: [CB4]
@@ -66,3 +78,7 @@ capacity_blocks:
 - name: CB4
   type: H100
   nodes: [vm-41, vm-42, vm-43, vm-44]
+# CPU capacity block - not associated with any switch (no IB labels)
+- name: CPU-CB
+  type: CPU
+  nodes: [cpu-01, cpu-02, cpu-03, cpu-04]

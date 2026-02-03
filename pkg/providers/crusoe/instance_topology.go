@@ -51,6 +51,8 @@ func (p *baseProvider) generateInstanceTopology(ctx context.Context, instances [
 		}
 
 		instance := buildInstanceTopology(node)
+		klog.V(4).Infof("Built instance topology: ID=%q datacenter=%q spine=%q block=%q", 
+			instance.InstanceID, instance.DatacenterID, instance.SpineID, instance.BlockID)
 		topo.Append(instance)
 		stats.success++
 	}
@@ -97,24 +99,37 @@ func shouldSkipNode(nodeName string, requestedIDs map[string]struct{}) bool {
 }
 
 // buildInstanceTopology constructs topology object from node labels.
-// Nodes without IB labels are assigned to a default CPU partition.
+// Uses 3-tier hierarchy with common root: Crusoe (L1) -> Partition (L2) -> Pod (L3)
+// This enables SLURM to schedule jobs across both GPU and CPU nodes.
+// Nodes without IB labels are assigned to default CPU partition.
 func buildInstanceTopology(node corev1.Node) *topology.InstanceTopology {
-	partition, podID, err := extractTopologyLabels(node.Labels)
-	if err != nil {
-		// Fallback: nodes without IB labels go to CPU partition
-		klog.V(4).Infof("Node %q missing IB labels, using CPU partition", node.Name)
-		partition = DefaultCPUPartition
-		podID = DefaultCPUPod
+	hasTopology, labels := extractTopologyLabels(node.Labels)
+
+	// CPU nodes: no IB labels, use defaults under common root
+	if !hasTopology {
+		klog.V(4).Infof("Node %q using CPU defaults", node.Name)
+		return &topology.InstanceTopology{
+			InstanceID:     node.Name,
+			DatacenterID:   DefaultDatacenter,   // crusoe (common root)
+			SpineID:        DefaultCPUPartition, // cpu-partition
+			BlockID:        DefaultCPUPod,       // cpu-pod
+			DatacenterName: DefaultDatacenter,
+			SpineName:      DefaultCPUPartition,
+			BlockName:      DefaultCPUPod,
+			AcceleratorID:  "", // No IB for CPU
+		}
 	}
 
+	// GPU nodes: have all 3 IB labels, placed under common root
 	return &topology.InstanceTopology{
 		InstanceID:     node.Name,
-		DatacenterID:   partition,
-		SpineID:        podID,
-		BlockID:        "",  // Empty for 2-tier topology (partition -> pod -> nodes)
-		DatacenterName: partition,
-		SpineName:      "pod-" + podID,
-		BlockName:      "",
+		DatacenterID:   DefaultDatacenter,                   // L1: crusoe (common root)
+		SpineID:        labels.PartitionID,                  // L2: crusoe.ai/ib.partition.id
+		BlockID:        labels.PodID,                        // L3: crusoe.ai/pod.id
+		DatacenterName: DefaultDatacenter,                   // crusoe
+		SpineName:      "partition-" + labels.PartitionName, // IB partition name
+		BlockName:      "pod-" + labels.PodID,               // Pod UUID
+		AcceleratorID:  labels.PartitionID,                  // IB partition = high-speed domain
 	}
 }
 
