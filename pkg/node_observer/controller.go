@@ -35,6 +35,8 @@ type Controller struct {
 	statusInformer *StatusInformer
 }
 
+const engineSlinky = "slinky"
+
 func NewController(ctx context.Context, client kubernetes.Interface, cfg *Config) (*Controller, error) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	payload := topology.NewRequest(cfg.Provider, cfg.Engine)
@@ -43,8 +45,19 @@ func NewController(ctx context.Context, client kubernetes.Interface, cfg *Config
 		return nil, fmt.Errorf("failed to marshal payload: %v", err)
 	}
 
+	trigger := cfg.Trigger
+	if cfg.Engine.Name == engineSlinky {
+		// Derive ConfigMap watch from slinky engine params so no extra configuration is needed
+		if name, ok := cfg.Engine.Params[topology.KeyTopoConfigmapName].(string); ok && trigger.ConfigMapName == "" {
+			trigger.ConfigMapName = name
+		}
+		if ns, ok := cfg.Engine.Params[topology.KeyNamespace].(string); ok && trigger.ConfigMapNamespace == "" {
+			trigger.ConfigMapNamespace = ns
+		}
+	}
+
 	f := httpreq.GetRequestFunc(ctx, http.MethodPost, headers, nil, data, cfg.GenerateTopologyURL)
-	statusInformer, err := NewStatusInformer(ctx, client, &cfg.Trigger, f)
+	statusInformer, err := NewStatusInformer(ctx, client, &trigger, f)
 	if err != nil {
 		return nil, err
 	}

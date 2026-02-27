@@ -7,10 +7,12 @@ package node_observer
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/NVIDIA/topograph/internal/httpreq"
 	"github.com/NVIDIA/topograph/internal/k8s"
+	"github.com/NVIDIA/topograph/pkg/topology"
 )
 
 type StatusInformer struct {
@@ -27,6 +30,7 @@ type StatusInformer struct {
 	reqFunc     httpreq.RequestFunc
 	nodeFactory informers.SharedInformerFactory
 	podFactory  informers.SharedInformerFactory
+	cmFactory   informers.SharedInformerFactory
 	queue       workqueue.TypedRateLimitingInterface[any]
 }
 
@@ -60,6 +64,16 @@ func NewStatusInformer(ctx context.Context, client kubernetes.Interface, trigger
 			client, 0, informers.WithTweakListOptions(listOptionsFunc))
 	}
 
+	if trigger.ConfigMapName != "" && trigger.ConfigMapNamespace != "" {
+		cmName := trigger.ConfigMapName
+		statusInformer.cmFactory = informers.NewSharedInformerFactoryWithOptions(
+			client, 0,
+			informers.WithNamespace(trigger.ConfigMapNamespace),
+			informers.WithTweakListOptions(func(options *metav1.ListOptions) {
+				options.FieldSelector = "metadata.name=" + cmName
+			}))
+	}
+
 	return statusInformer, nil
 }
 
@@ -73,6 +87,10 @@ func (s *StatusInformer) Start() error {
 	}
 
 	if err := s.startPodInformer(); err != nil {
+		return err
+	}
+
+	if err := s.startConfigMapInformer(); err != nil {
 		return err
 	}
 
@@ -91,6 +109,9 @@ func (s *StatusInformer) Stop(_ error) {
 	}
 	if s.podFactory != nil {
 		s.podFactory.Shutdown()
+	}
+	if s.cmFactory != nil {
+		s.cmFactory.Shutdown()
 	}
 	if s.queue != nil {
 		s.queue.ShutDown()
@@ -174,6 +195,37 @@ func (s *StatusInformer) startPodInformer() error {
 		}
 		s.podFactory.Start(s.ctx.Done())
 		s.podFactory.WaitForCacheSync(s.ctx.Done())
+	}
+	return nil
+}
+
+func (s *StatusInformer) startConfigMapInformer() error {
+	if s.cmFactory != nil {
+		informer := s.cmFactory.Core().V1().ConfigMaps().Informer()
+		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			UpdateFunc: func(_, newObj any) {
+				cm, ok := newObj.(*corev1.ConfigMap)
+				if !ok {
+					return
+				}
+				if cm.Annotations[topology.KeyConfigMapRegenerate] != "true" {
+					return
+				}
+				klog.V(4).Infof("Informer detected %s annotation on configmap %s/%s", topology.KeyConfigMapRegenerate, cm.Namespace, cm.Name)
+				patch := []byte(fmt.Sprintf(`{"metadata":{"annotations":{%q:null}}}`, topology.KeyConfigMapRegenerate))
+				if _, patchErr := s.client.CoreV1().ConfigMaps(cm.Namespace).Patch(
+					s.ctx, cm.Name, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); patchErr != nil {
+					klog.Errorf("Failed to remove %s annotation from configmap %s/%s: %v",
+						topology.KeyConfigMapRegenerate, cm.Namespace, cm.Name, patchErr)
+				}
+				s.queue.Add(struct{}{})
+			},
+		})
+		if err != nil {
+			return err
+		}
+		s.cmFactory.Start(s.ctx.Done())
+		s.cmFactory.WaitForCacheSync(s.ctx.Done())
 	}
 	return nil
 }

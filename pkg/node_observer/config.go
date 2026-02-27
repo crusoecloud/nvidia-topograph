@@ -35,8 +35,10 @@ type Config struct {
 }
 
 type Trigger struct {
-	NodeSelector map[string]string     `yaml:"nodeSelector,omitempty"`
-	PodSelector  *metav1.LabelSelector `yaml:"podSelector,omitempty"`
+	NodeSelector       map[string]string     `yaml:"nodeSelector,omitempty"`
+	PodSelector        *metav1.LabelSelector `yaml:"podSelector,omitempty"`
+	ConfigMapName      string                `yaml:"configMapName,omitempty"`
+	ConfigMapNamespace string                `yaml:"configMapNamespace,omitempty"`
 }
 
 func NewConfigFromFile(fname string) (*Config, error) {

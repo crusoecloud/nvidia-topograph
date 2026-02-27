@@ -49,6 +49,8 @@ const (
 	KeyConfigMapPlugin            = "topograph.nvidia.com/plugin"
 	KeyConfigMapBlockSizes        = "topograph.nvidia.com/block-sizes"
 	KeyConfigMapNamespace         = "topograph.nvidia.com/slurm-namespace"
+	// KeyConfigMapRegenerate is set to "true" on the topograph config ConfigMap to trigger topology regeneration
+	KeyConfigMapRegenerate = "topograph.nvidia.com/regenerate"
 )
 
 // Vertex is a tree node, representing a compute node or a network switch, where
