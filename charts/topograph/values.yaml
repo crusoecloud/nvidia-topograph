@@ -44,6 +44,8 @@ config:
   requestAggregationDelay: 15s
   # Optional secret with API credentials
   # credentialsSecretName:
+  # How often to regenerate the topology; disabled if unset (e.g. "5m", "1h")
+  reconcilePeriod: 5m
 
 topologyNodeLabels:
   accelerator: network.topology.nvidia.com/accelerator

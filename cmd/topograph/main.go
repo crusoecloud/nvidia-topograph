@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/oklog/run"
 	"k8s.io/klog/v2"
@@ -36,12 +37,14 @@ var GitTag string
 func main() {
 	var cfg string
 	var labelAccelerator, labelBlock, labelSpine, labelDatacenter string
+	var reconcilePeriod time.Duration
 	var version bool
 	flag.StringVar(&cfg, "c", "/etc/topograph/topograph-config.yaml", "config file")
 	flag.StringVar(&labelAccelerator, "k8s-topology-key-accelerator", k8s.DefaultLabelAccelerator, "K8s node label for accelerated network type")
 	flag.StringVar(&labelBlock, "k8s-topology-key-block", k8s.DefaultLabelBlock, "K8s node label for the cluster's lower network tier")
 	flag.StringVar(&labelSpine, "k8s-topology-key-spine", k8s.DefaultLabelSpine, "K8s node label for the cluster's middle network tier")
 	flag.StringVar(&labelDatacenter, "k8s-topology-key-datacenter", k8s.DefaultLabelDatacenter, "K8s node label for the cluster's top network tier")
+	flag.DurationVar(&reconcilePeriod, "reconcile-period", 0, "how often to regenerate the topology; disabled if 0")
 	flag.BoolVar(&version, "version", false, "show the version")
 
 	klog.InitFlags(nil)
@@ -55,13 +58,13 @@ func main() {
 
 	k8s.InitLabels(labelAccelerator, labelBlock, labelSpine, labelDatacenter)
 
-	if err := mainInternal(cfg); err != nil {
+	if err := mainInternal(cfg, reconcilePeriod); err != nil {
 		klog.Error(err.Error())
 		os.Exit(1)
 	}
 }
 
-func mainInternal(c string) error {
+func mainInternal(c string, reconcilePeriod time.Duration) error {
 	cfg, err := config.NewFromFile(c)
 	if err != nil {
 		return err
@@ -81,6 +84,11 @@ func mainInternal(c string) error {
 	g.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM))
 	// HTTP endpoint
 	g.Add(server.GetRunGroup())
+	// Periodic topology reconciler (optional)
+	if reconcilePeriod > 0 {
+		r := server.NewReconciler(cfg, reconcilePeriod)
+		g.Add(r.Start, r.Stop)
+	}
 
 	return g.Run()
 }
