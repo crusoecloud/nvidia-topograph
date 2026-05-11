@@ -32,11 +32,12 @@ const (
 	KeyTopoConfigmapName = "topologyConfigmapName"
 	KeyBlockSizes        = "block_sizes"
 
-	KeyPlugin     = "plugin"
-	TopologyTree  = "topology/tree"
-	TopologyBlock = "topology/block"
-	TopologyFlat  = "topology/flat"
-	NoTopology    = "no-topology"
+	KeyPlugin      = "plugin"
+	KeyGeneratedAt = "generated_at"
+	TopologyTree   = "topology/tree"
+	TopologyBlock  = "topology/block"
+	TopologyFlat   = "topology/flat"
+	NoTopology     = "no-topology"
 
 	KeyNodeInstance  = "topograph.nvidia.com/instance"
 	KeyNodeRegion    = "topograph.nvidia.com/region"

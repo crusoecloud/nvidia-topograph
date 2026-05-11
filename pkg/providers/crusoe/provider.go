@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -119,7 +120,18 @@ func (p *baseProvider) GenerateTopologyConfig(ctx context.Context, pageSize *int
 	klog.Infof("Extracted topology for %d instances", topo.Len())
 
 	// Convert to 3-tier graph (BlockID = SpineID for 2-tier systems)
-	return topo.ToThreeTierGraph(NAME, instances, false), nil
+	root := topo.ToThreeTierGraph(NAME, instances, false)
+	setGeneratedAt(root)
+	return root, nil
+}
+
+// setGeneratedAt stamps the root vertex with the current UTC timestamp so the
+// translate layer can emit a "# generated_at" comment in the rendered topology.
+func setGeneratedAt(root *topology.Vertex) {
+	if root.Metadata == nil {
+		root.Metadata = make(map[string]string)
+	}
+	root.Metadata[topology.KeyGeneratedAt] = time.Now().UTC().Format(time.RFC3339)
 }
 
 // Engine support methods for SLURM integration
