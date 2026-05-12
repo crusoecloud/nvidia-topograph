@@ -8,6 +8,7 @@ package translate
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"sort"
 
 	"github.com/agrea/ptr"
@@ -38,6 +39,7 @@ type NetworkTopology struct {
 	blocks   []*blockInfo                // blocks
 	vertices map[string]*topology.Vertex // object ID to Vertex map
 	nodeInfo map[string]*nodeInfo        // node name to nodeInfo map
+	metadata map[string]string           // root vertex metadata propagated to output
 }
 
 type blockInfo struct {
@@ -104,6 +106,7 @@ func NewNetworkTopology(root *topology.Vertex, cfg *Config) (*NetworkTopology, e
 		tree:     make(map[string][]string),
 		vertices: make(map[string]*topology.Vertex),
 		nodeInfo: make(map[string]*nodeInfo),
+		metadata: root.Metadata,
 	}
 
 	nt.initTree(root)
@@ -246,6 +249,9 @@ func (nt *NetworkTopology) markBlockNodes(block *topology.Vertex, indx int) *blo
 }
 
 func (nt *NetworkTopology) Generate(wr io.Writer) *httperr.Error {
+	if err := nt.writeHeader(wr); err != nil {
+		return httperr.NewError(http.StatusInternalServerError, err.Error())
+	}
 	if len(nt.config.Topologies) != 0 {
 		return nt.toYamlTopology(wr)
 	} else {
@@ -254,4 +260,15 @@ func (nt *NetworkTopology) Generate(wr io.Writer) *httperr.Error {
 		}
 		return nt.toTreeTopology(wr)
 	}
+}
+
+// writeHeader emits comment lines for metadata propagated from the root vertex
+// (e.g. provider-supplied generation timestamps).
+func (nt *NetworkTopology) writeHeader(wr io.Writer) error {
+	if v, ok := nt.metadata[topology.KeyGeneratedAt]; ok && len(v) != 0 {
+		if _, err := fmt.Fprintf(wr, "# generated_at: %s\n", v); err != nil {
+			return err
+		}
+	}
+	return nil
 }
