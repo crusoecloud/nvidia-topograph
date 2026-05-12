@@ -7,6 +7,7 @@ package crusoe
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,8 @@ import (
 	"github.com/NVIDIA/topograph/pkg/providers"
 	"github.com/NVIDIA/topograph/pkg/topology"
 )
+
+var generatedAtLineRE = regexp.MustCompile(`(?m)^# generated_at: [^\n]+\n`)
 
 func TestProviderSim(t *testing.T) {
 	ctx := context.Background()
@@ -170,7 +173,8 @@ SwitchName=pod-pod-2 Nodes=vm-21
 				require.Nil(t, httpErr)
 				data, httpErr := slurm.GenerateOutput(ctx, topo, tc.params)
 				require.Nil(t, httpErr)
-				require.Equal(t, tc.topology, string(data))
+				require.Regexp(t, `^# generated_at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n`, string(data))
+				require.Equal(t, tc.topology, generatedAtLineRE.ReplaceAllString(string(data), ""))
 			}
 		})
 	}

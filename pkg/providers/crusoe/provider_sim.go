@@ -66,7 +66,9 @@ func (p *ProviderSim) GenerateTopologyConfig(ctx context.Context, pageSize *int,
 	klog.Infof("Built simulation topology with %d instances", topo.Len())
 
 	// Convert to 3-tier graph
-	return topo.ToThreeTierGraph(NAME, instances, false), nil
+	root := topo.ToThreeTierGraph(NAME, instances, false)
+	setGeneratedAt(root)
+	return root, nil
 }
 
 // buildTopologyFromModel extracts topology from YAML model
