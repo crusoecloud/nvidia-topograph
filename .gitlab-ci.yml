@@ -1,0 +1,88 @@
+# GitLab CI/CD pipeline for the Crusoe nvidia-topograph fork.
+#
+# Builds a multi-arch (linux/amd64 + linux/arm64) container image and publishes it
+# to ghcr.io/crusoecloud/nvidia-topograph.
+#
+# The Dockerfile cross-compiles pure-static Go binaries, and its builder stage is
+# pinned to $BUILDPLATFORM, so both arches build natively on a standard amd64 docker
+# runner — no QEMU emulation required.
+#
+# Publishing is intentional/manual:
+#   1. Tag the commit to release:  git tag vX.Y.Z-crusoe.N  &&  git push --tags
+#   2. CI/CD > Pipelines > "Run Pipeline" on the default branch (main).
+#   3. Image is published as :vX.Y.Z-crusoe.N (from `git describe`) and :latest.
+#
+# Required CI/CD variables (configured in GitLab project settings):
+#   GHCR_USERNAME - GitHub username the PAT was generated from
+#   GHCR_TOKEN    - GitHub PAT with permission to push the package
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+stages:
+  - build
+  - publish
+
+default:
+  image: docker:28-cli
+  services:
+    - name: docker:28-dind
+      command: ["--mtu=1460"]
+  tags:
+    - docker
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_BUILDKIT: "1"
+  GHCR_IMAGE: "ghcr.io/crusoecloud/nvidia-topograph"
+  PLATFORMS: "linux/amd64,linux/arm64"
+
+# Validation build on push / merge request: builds both arches but does NOT push,
+# so a broken Dockerfile is caught before anyone publishes.
+build_image:
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: never
+    - when: always
+  script:
+    - docker buildx create --use
+    - |
+      docker buildx build \
+        --platform "${PLATFORMS}" \
+        --file ./Dockerfile \
+        --output type=cacheonly \
+        .
+  timeout: 1h
+
+# Publish the multi-arch image to GHCR. Manual, default branch only.
+publish_ghcr:
+  stage: publish
+  resource_group: publish-ghcr
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apk add --no-cache git
+    - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+  script:
+    # Tags are required for the version below; GIT_DEPTH:0 fetches full history,
+    # and this fetch is a belt-and-suspenders guard in case tags weren't included.
+    - git fetch --tags --force
+    - VERSION=$(git describe --tags)
+    - echo "Publishing ${GHCR_IMAGE}:${VERSION} and :latest"
+    - docker buildx create --use
+    - |
+      docker buildx build \
+        --platform "${PLATFORMS}" \
+        --file ./Dockerfile \
+        --tag "${GHCR_IMAGE}:${VERSION}" \
+        --tag "${GHCR_IMAGE}:latest" \
+        --output type=registry \
+        .
+    - docker buildx imagetools inspect "${GHCR_IMAGE}:${VERSION}"
+  timeout: 1h
