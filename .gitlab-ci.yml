@@ -1,0 +1,151 @@
+# GitLab CI/CD pipeline for the Crusoe nvidia-topograph fork.
+#
+# Builds a multi-arch (linux/amd64 + linux/arm64) container image and publishes it
+# to ghcr.io/crusoecloud/nvidia-topograph.
+#
+# The Dockerfile cross-compiles pure-static Go binaries, and its builder stage is
+# pinned to $BUILDPLATFORM, so both arches build natively on a standard amd64 docker
+# runner — buildkit never executes a foreign-arch binary, so no QEMU is required
+# (these k8s runners can't do QEMU-in-Docker, which needs nested virtualization).
+#
+# Publishing is automatic on merge to the default branch (push to main):
+#   * The upstream version base is derived from the latest git tag
+#     (e.g. v0.1.0-crusoe.1 -> 0.1.0).
+#   * The CMK revision N auto-increments: the job queries GHCR for the highest
+#     existing <version>-cmk.N tag and publishes the next one.
+#   * Image is published as :<version>-cmk.N and :latest, e.g. :0.1.0-cmk.3.
+# On other branches / merge requests, build_image validates the multi-arch build
+# without pushing.
+#
+# Required CI/CD variables (configured in GitLab project settings):
+#   GHCR_USERNAME - GitHub username the PAT was generated from
+#   GHCR_TOKEN    - GitHub PAT with permission to push (and read tags from) the package
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+stages:
+  - build
+  - publish
+
+default:
+  image: docker:28-cli
+  services:
+    - name: docker:28-dind
+      command: ["--mtu=1460"]
+  tags:
+    - docker
+  before_script:
+    # Wait for the dind daemon to accept connections before any buildx call. On these
+    # Kubernetes-executor runners the daemon races job startup, and hitting buildx
+    # immediately fails with "context deadline exceeded" on the docker socket.
+    - |
+      for i in $(seq 1 30); do
+        docker info >/dev/null 2>&1 && break
+        echo "waiting for docker daemon (${i}/30)..."
+        sleep 2
+      done
+      docker info >/dev/null
+    # Create a buildx builder (docker-container driver) for multi-platform builds.
+    # Pass the runner's buildkitd config only when it's actually mounted. Idempotent:
+    # reuse the builder if a previous job on this host already created it.
+    - |
+      BUILDX_CONFIG_ARG=""
+      if [ -f "${BUILDKIT_CONFIG}" ]; then
+        BUILDX_CONFIG_ARG="--buildkitd-config ${BUILDKIT_CONFIG}"
+        echo "Using buildkitd config ${BUILDKIT_CONFIG}"
+      fi
+      docker buildx create --name topograph-builder --use ${BUILDX_CONFIG_ARG} 2>/dev/null \
+        || docker buildx use topograph-builder
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_BUILDKIT: "1"
+  BUILDKIT_CONFIG: "/etc/buildkit/buildkitd.toml"
+  GHCR_IMAGE: "ghcr.io/crusoecloud/nvidia-topograph"
+  PLATFORMS: "linux/amd64,linux/arm64"
+
+# Validation build on non-default branches / merge requests: builds both arches but
+# does NOT push, so a broken Dockerfile is caught before merge. Skipped on the default
+# branch, where publish_ghcr already builds (and pushes) the same image.
+build_image:
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: never
+    - when: always
+  script:
+    - |
+      docker buildx build \
+        --platform "${PLATFORMS}" \
+        --file ./Dockerfile \
+        --output type=cacheonly \
+        .
+  timeout: 1h
+
+# Publish the multi-arch image to GHCR, auto-incrementing the CMK revision.
+# Runs automatically on merge to the default branch.
+publish_ghcr:
+  stage: publish
+  resource_group: publish-ghcr
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  variables:
+    GIT_DEPTH: 0
+    GHCR_REPO: "crusoecloud/nvidia-topograph"  # registry path under ghcr.io (no host)
+  script:
+    - apk add --no-cache git jq curl
+    - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+    # GIT_DEPTH:0 fetches full history; this fetch is a belt-and-suspenders guard in
+    # case tags weren't included in the checkout.
+    - git fetch --tags --force
+    - |
+      # Derive the upstream version base from the latest git tag, stripping the leading
+      # "v" and any pre-release/revision suffix: v0.1.0-crusoe.1 -> 0.1.0
+      RAW_TAG=$(git describe --tags --abbrev=0)
+      VERSION_BASE=$(echo "${RAW_TAG}" | sed 's/^v//; s/-.*//')
+      if [ -z "${VERSION_BASE}" ]; then
+        echo "ERROR: could not derive a version base from git tag '${RAW_TAG}'" >&2
+        exit 1
+      fi
+      echo "Version base: ${VERSION_BASE} (from git tag ${RAW_TAG})"
+
+      # Find the highest existing <version>-cmk.N on GHCR and increment it. The cmk
+      # revision is scoped to the version base, so bumping the upstream version starts
+      # a fresh cmk.1.
+      TOKEN=$(curl -sf -u "${GHCR_USERNAME}:${GHCR_TOKEN}" \
+        "https://ghcr.io/token?scope=repository:${GHCR_REPO}:pull" | jq -r '.token') || true
+      MAX_N=""
+      if [ -n "${TOKEN}" ] && [ "${TOKEN}" != "null" ]; then
+        TAGS_JSON=$(curl -sf -H "Authorization: Bearer ${TOKEN}" \
+          "https://ghcr.io/v2/${GHCR_REPO}/tags/list") || true
+        if [ -n "${TAGS_JSON}" ] && ! echo "${TAGS_JSON}" | jq -e '.errors' >/dev/null 2>&1; then
+          MAX_N=$(echo "${TAGS_JSON}" | jq -r '.tags[]' \
+            | sed -n "s/^${VERSION_BASE}-cmk\.\([0-9][0-9]*\)$/\1/p" \
+            | sort -n | tail -1)
+        fi
+      fi
+      if [ -z "${MAX_N}" ]; then
+        CMK_N=1
+        echo "No existing ${VERSION_BASE}-cmk.N tags found. Starting at cmk.1"
+      else
+        CMK_N=$((MAX_N + 1))
+        echo "Latest: ${VERSION_BASE}-cmk.${MAX_N} -> next: cmk.${CMK_N}"
+      fi
+      export VERSION="${VERSION_BASE}-cmk.${CMK_N}"
+      echo "Publishing ${GHCR_IMAGE}:${VERSION} and :latest"
+
+      docker buildx build \
+        --platform "${PLATFORMS}" \
+        --file ./Dockerfile \
+        --tag "${GHCR_IMAGE}:${VERSION}" \
+        --tag "${GHCR_IMAGE}:latest" \
+        --output type=registry \
+        .
+      docker buildx imagetools inspect "${GHCR_IMAGE}:${VERSION}"
+  timeout: 1h
