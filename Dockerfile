@@ -1,4 +1,4 @@
-FROM golang:1.24.7 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24.7 AS builder
 
 WORKDIR /go/src/github.com/NVIDIA/topograph
 COPY . .
