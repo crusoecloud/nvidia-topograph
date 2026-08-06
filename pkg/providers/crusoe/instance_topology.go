@@ -51,8 +51,8 @@ func (p *baseProvider) generateInstanceTopology(ctx context.Context, instances [
 		}
 
 		instance := buildInstanceTopology(node)
-		klog.V(4).Infof("Built instance topology: ID=%q datacenter=%q spine=%q block=%q", 
-			instance.InstanceID, instance.DatacenterID, instance.SpineID, instance.BlockID)
+		klog.V(4).Infof("Built instance topology: ID=%q datacenter=%q spine=%q block=%q domain=%q",
+			instance.InstanceID, instance.DatacenterID, instance.SpineID, instance.BlockID, instance.AcceleratorID)
 		topo.Append(instance)
 		stats.success++
 	}
@@ -99,15 +99,26 @@ func shouldSkipNode(nodeName string, requestedIDs map[string]struct{}) bool {
 }
 
 // buildInstanceTopology constructs topology object from node labels.
-// Uses 3-tier hierarchy with common root: Crusoe (L1) -> Partition (L2) -> Pod (L3)
-// This enables SLURM to schedule jobs across both GPU and CPU nodes.
-// Nodes without IB labels are assigned to default CPU partition.
+//
+// Two topologies are produced from the same set of labels, and the engine picks
+// whichever the cluster is configured for:
+//
+//   - tree: 3-tier hierarchy with a common root, Crusoe (L1) -> Partition (L2)
+//     -> Pod (L3). This enables SLURM to schedule jobs across both GPU and CPU
+//     nodes. Nodes without IB labels are assigned to the default CPU partition.
+//   - block: AcceleratorID names the high-speed domain the node belongs to, and
+//     each distinct domain becomes one Slurm block. On MNNVL systems
+//     (GB200/GB300 NVL72) that domain is the NVLink rack, taken from
+//     nvidia.com/gpu.clique; everywhere else it stays the IB partition.
 func buildInstanceTopology(node corev1.Node) *topology.InstanceTopology {
 	hasTopology, labels := extractTopologyLabels(node.Labels)
+	nvlDomain := extractNVLinkDomain(node.Labels)
 
-	// CPU nodes: no IB labels, use defaults under common root
+	// CPU nodes: no IB labels, use defaults under common root.
+	// A GB200 node on the non-IB SKU still lands here, but it does have an
+	// NVLink domain, so it must keep contributing a block.
 	if !hasTopology {
-		klog.V(4).Infof("Node %q using CPU defaults", node.Name)
+		klog.V(4).Infof("Node %q using CPU defaults (nvlink domain %q)", node.Name, nvlDomain)
 		return &topology.InstanceTopology{
 			InstanceID:     node.Name,
 			DatacenterID:   DefaultDatacenter,   // crusoe (common root)
@@ -116,8 +127,16 @@ func buildInstanceTopology(node corev1.Node) *topology.InstanceTopology {
 			DatacenterName: DefaultDatacenter,
 			SpineName:      DefaultCPUPartition,
 			BlockName:      DefaultCPUPod,
-			AcceleratorID:  "", // No IB for CPU
+			AcceleratorID:  nvlDomain, // empty unless the node is on an NVLink fabric
 		}
+	}
+
+	// The NVLink domain is a strictly tighter grouping than the IB partition:
+	// a partition can span many racks, while a clique never leaves one. Prefer
+	// it whenever it is advertised so blocks track racks, not the whole fabric.
+	acceleratorID := labels.PartitionID
+	if nvlDomain != "" {
+		acceleratorID = nvlDomain
 	}
 
 	// GPU nodes: have all 3 IB labels, placed under common root
@@ -129,7 +148,7 @@ func buildInstanceTopology(node corev1.Node) *topology.InstanceTopology {
 		DatacenterName: DefaultDatacenter,                   // crusoe
 		SpineName:      "partition-" + labels.PartitionName, // IB partition name
 		BlockName:      "pod-" + labels.PodID,               // Pod UUID
-		AcceleratorID:  labels.PartitionID,                  // IB partition = high-speed domain
+		AcceleratorID:  acceleratorID,                       // NVLink domain, else IB partition
 	}
 }
 
