@@ -6,6 +6,7 @@
 package crusoe
 
 import (
+	"bytes"
 	"net/http"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/NVIDIA/topograph/pkg/topology"
+	"github.com/NVIDIA/topograph/pkg/translate"
 )
 
 func TestGetRequestedNodeIDs(t *testing.T) {
@@ -415,6 +417,70 @@ func TestGB200BlockGrouping(t *testing.T) {
 	blockB := blockRoot.Vertices["nvl-"+cliqueB]
 	require.NotNil(t, blockB)
 	require.ElementsMatch(t, []string{"rack-b-1"}, vertexNames(blockB.Vertices))
+}
+
+// TestGB200RenderedBlockTopologyConf renders what Slurm actually consumes, so a
+// regression in the provider shows up as a diff in topology.conf rather than
+// only in the intermediate graph.
+func TestGB200RenderedBlockTopologyConf(t *testing.T) {
+	const (
+		partition = "0cf47922-9f9e-4a2e-b187-5c51697e7739"
+		cliqueA   = "29d9a0b8-948d-4a61-8b9e-fbbbf06c521b.32766"
+		cliqueB   = "29d9a0b8-948d-4a61-8b9e-fbbbf06c521b.32767"
+	)
+
+	gb200Node := func(name, clique string) corev1.Node {
+		return corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+				Labels: map[string]string{
+					"crusoe.ai/ib.partition.id": partition,
+					"crusoe.ai/pod.id":          "pod-1",
+					"nvidia.com/gpu.clique":     clique,
+				},
+			},
+		}
+	}
+
+	nodes := []corev1.Node{
+		gb200Node("rack-a-1", cliqueA),
+		gb200Node("rack-a-2", cliqueA),
+		gb200Node("rack-b-1", cliqueB),
+		gb200Node("rack-b-2", cliqueB),
+	}
+
+	topo := topology.NewClusterTopology()
+	instances := make(map[string]string, len(nodes))
+	for _, node := range nodes {
+		topo.Append(buildInstanceTopology(node))
+		instances[node.Name] = node.Name
+	}
+
+	root := topo.ToThreeTierGraph(NAME, []topology.ComputeInstances{
+		{Region: "local", Instances: instances},
+	}, false)
+
+	nt, err := translate.NewNetworkTopology(root, &translate.Config{
+		Plugin: topology.TopologyBlock,
+	})
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.Nil(t, nt.Generate(&buf))
+
+	// Block IDs come from the sorted domain names, so cliqueA is block001.
+	// Emission order follows the tree walk, which visits the last leaf first,
+	// hence block002 is printed first. Deterministic either way, which is what
+	// keeps the topology ConfigMap from churning on every regeneration.
+	//
+	// BlockSizes=2,4 is the planning size (smallest domain) followed by the one
+	// power-of-two level above it.
+	expected := "# block002=nvl-" + cliqueB + "\n" +
+		"BlockName=block002 Nodes=rack-b-[1-2]\n" +
+		"# block001=nvl-" + cliqueA + "\n" +
+		"BlockName=block001 Nodes=rack-a-[1-2]\n" +
+		"BlockSizes=2,4\n"
+	require.Equal(t, expected, buf.String())
 }
 
 func vertexNames(m map[string]*topology.Vertex) []string {
