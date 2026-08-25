@@ -11,9 +11,20 @@ import (
 
 const (
 	// Label keys for Crusoe topology information (2-tier hierarchy)
-	labelPartitionID   = "crusoe.ai/ib.partition.id"        // L2: IB Partition
-	labelPartitionName = "crusoe.ai/ib.partition.name"      // L2: IB Partition display name (optional)
-	labelSwitchID      = "crusoe.ai/pod.id"                 // L3: Pod/Leaf switch
+	labelPartitionID   = "crusoe.ai/ib.partition.id"   // L2: IB Partition
+	labelPartitionName = "crusoe.ai/ib.partition.name" // L2: IB Partition display name (optional)
+	labelSwitchID      = "crusoe.ai/pod.id"            // L3: Pod/Leaf switch
+
+	// labelGPUClique is published by NVIDIA GPU Feature Discovery on MNNVL
+	// systems (GB200/GB300 NVL72). Its value is "<clusterUUID>.<cliqueID>" and
+	// identifies the NVLink domain -- i.e. the set of nodes that share an
+	// NVLink fabric and can therefore form a single IMEX/ComputeDomain.
+	// Nodes carrying the same value sit in the same rack-scale NVL domain.
+	labelGPUClique = "nvidia.com/gpu.clique"
+
+	// nvlDomainPrefix is prepended to the clique value to build a readable
+	// block domain name in the generated topology.conf.
+	nvlDomainPrefix = "nvl-"
 
 	// Common root datacenter for all nodes (enables cross-partition scheduling)
 	DefaultDatacenter = "crusoe"
@@ -57,4 +68,22 @@ func extractTopologyLabels(labels map[string]string) (bool, *TopologyLabels) {
 		PartitionName: partitionName, // Either label value or truncated ID
 		PodID:         podID,
 	}
+}
+
+// extractNVLinkDomain returns the NVLink (MNNVL) domain name for a node, or ""
+// when the node is not part of an NVLink fabric.
+//
+// On GB200/GB300 NVL72 systems every node in a rack shares an NVLink domain,
+// and NVIDIA GPU Feature Discovery advertises it as nvidia.com/gpu.clique.
+// Slurm block scheduling wants one block per NVLink domain so that jobs are
+// packed into the fewest racks and can exploit MNNVL bandwidth rather than
+// falling back to InfiniBand.
+func extractNVLinkDomain(labels map[string]string) string {
+	clique := labels[labelGPUClique]
+	if clique == "" {
+		return ""
+	}
+
+	klog.V(4).Infof("Extracted NVLink domain from %s=%q", labelGPUClique, clique)
+	return nvlDomainPrefix + clique
 }
