@@ -7,6 +7,7 @@ package node_observer
 
 import (
 	"context"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,6 +98,23 @@ func (s *StatusInformer) Stop(_ error) {
 	}
 }
 
+// nodeUpdateAffectsTopology reports whether a node update can change the
+// generated topology.
+//
+// Providers read topology out of node labels, so a label change is the only node
+// update that matters. Everything else on a Node moves constantly - heartbeats,
+// conditions, allocatable - and requeueing on those would regenerate topology
+// without end.
+//
+// This is not cosmetic on Multi-Node NVLink hardware. GPU Feature Discovery
+// applies nvidia.com/gpu.clique after the node registers, so the label that
+// decides which block a node belongs to arrives late. With no handler here, a
+// node stays out of the generated topology until some unrelated event happens to
+// requeue.
+func nodeUpdateAffectsTopology(oldNode, newNode *corev1.Node) bool {
+	return !maps.Equal(oldNode.Labels, newNode.Labels)
+}
+
 func (s *StatusInformer) startNodeInformer() error {
 	if s.nodeFactory != nil {
 		informer := s.nodeFactory.Core().V1().Nodes().Informer()
@@ -107,7 +125,20 @@ func (s *StatusInformer) startNodeInformer() error {
 					s.queue.Add(struct{}{})
 				}
 			},
-			//UpdateFunc: func(_, obj any) {} // TODO: clarify the change in node that would require topology update
+			UpdateFunc: func(oldObj, newObj any) {
+				oldNode, ok := oldObj.(*corev1.Node)
+				if !ok {
+					return
+				}
+				newNode, ok := newObj.(*corev1.Node)
+				if !ok {
+					return
+				}
+				if nodeUpdateAffectsTopology(oldNode, newNode) {
+					klog.V(4).Infof("Informer updated node %s labels", newNode.Name)
+					s.queue.Add(struct{}{})
+				}
+			},
 			DeleteFunc: func(obj any) {
 				switch v := obj.(type) {
 				case *corev1.Node:
