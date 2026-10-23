@@ -23,6 +23,10 @@ FROM runtime AS verify
 RUN apk add --no-cache openssl >/dev/null \
     && openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt \
        | openssl pkcs7 -print_certs -noout | grep '^subject=' > /tmp/roots.txt \
+    # /bin/sh has no pipefail: a failing openssl would leave an empty or
+    # truncated list and the distrusted-root check below would pass vacuously.
+    # A public bundle has well over 100 roots.
+    && test "$(wc -l < /tmp/roots.txt)" -ge 100 \
     && ! grep -E 'CN ?= ?(emSign ECC Root CA - G3|AAA Certificate Services|emSign Root TLS CA - G3|emSign Root CS CA - G3)' /tmp/roots.txt \
     && echo "trust store clean: $(wc -l < /tmp/roots.txt) roots"
 
