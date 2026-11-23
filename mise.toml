@@ -1,0 +1,18 @@
+[tools]
+go = "1.24.7"
+golangci-lint = "2.15.0"
+gotestsum = "1.13.0"
+"go:github.com/boumenot/gocover-cobertura" = "1.4.0"
+
+[vars]
+build_flags = """
+-ldflags=-extldflags "-static" -X main.GitTag={{ env.CI_COMMIT_REF_NAME | default(value=exec(command='git rev-parse --abbrev-ref HEAD 2>/dev/null || echo dev')) }}
+"""
+
+[settings]
+lockfile = true
+
+[task_config]
+includes = [
+  "git::https://git@gitlab.com/crusoeenergy/tools.git//tasks/go.toml?ref=master",
+]

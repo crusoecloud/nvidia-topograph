@@ -6,3 +6,9 @@
 /deb/topograph/etc/topograph/
 /deb/topograph/lib
 /rpmbuild
+/gl-code-quality-report.json
+/coverage.html
+/coverage.xml
+/junit.xml
+/.mise-data
+/coverage.out.tmp

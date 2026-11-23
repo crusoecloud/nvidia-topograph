@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-LINTER_BIN ?= golangci-lint
 DOCKER_BIN ?= docker
 GOOS ?= $(shell uname | tr '[:upper:]' '[:lower:]')
-GOARCH ?= $(shell arch | sed 's/x86_64/amd64/')
+GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 PLATFORMS ?= linux/arm64,linux/amd64
 TARGETS := topograph node-observer node-data-broker-initc
 CMD_DIR := ./cmd
@@ -47,28 +46,28 @@ clean:
 
 .PHONY: test
 test:
-	@echo running tests
-	go test -coverprofile=coverage.out -covermode=atomic -race ./...
+	@mise run go:test:race
 
 .PHONY: fmt
 fmt:
-	go fmt ./...
+	@mise exec -- go fmt ./...
 
 .PHONY: vet
 vet:
-	go vet ./...
+	@mise exec -- go vet ./...
 
 .PHONY: lint
 lint:
-	$(LINTER_BIN) run --new-from-rev "HEAD~$(git rev-list master.. --count)" ./...
+	@mise run go:lint:check
 
 .PHONY: mod
 mod:
-	go mod tidy
+	@mise run go:mod-tidy
 
 .PHONY: coverage
-coverage: test
-	go tool cover -func=coverage.out
+coverage:
+	@mise run go:test:cover
+	@mise run go:cover
 
 .PHONY: init-proto
 init-proto:

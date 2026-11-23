@@ -23,21 +23,45 @@
 
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-
-stages:
-  - build
-  - publish
+      auto_cancel:
+        on_new_commit: interruptible
 
 default:
+  interruptible: true
+
+include:
+  - component: $CI_SERVER_FQDN/crusoeenergy/tools/mise@master
+  - component: $CI_SERVER_FQDN/crusoeenergy/tools/go@master
+    inputs:
+      tag_version: "false"
+
+variables:
+  PLATFORMS: "linux/amd64,linux/arm64"
+
+pre_publish_artifacts:
+  rules:
+    - when: never
+
+publish_artifacts:
+  rules:
+    - when: never
+
+.ghcr_docker:
   image: docker:28-cli
   services:
     - name: docker:28-dind
       command: ["--mtu=1460"]
   tags:
     - docker
+  needs: []
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_BUILDKIT: "1"
+    BUILDKIT_CONFIG: "/etc/buildkit/buildkitd.toml"
+    GHCR_IMAGE: "ghcr.io/crusoecloud/nvidia-topograph"
   before_script:
     # Wait for the dind daemon to accept connections before any buildx call. On these
     # Kubernetes-executor runners the daemon races job startup, and hitting buildx
@@ -61,24 +85,14 @@ default:
       docker buildx create --name topograph-builder --use ${BUILDX_CONFIG_ARG} 2>/dev/null \
         || docker buildx use topograph-builder
 
-variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_BUILDKIT: "1"
-  BUILDKIT_CONFIG: "/etc/buildkit/buildkitd.toml"
-  GHCR_IMAGE: "ghcr.io/crusoecloud/nvidia-topograph"
-  PLATFORMS: "linux/amd64,linux/arm64"
-
-# Validation build on non-default branches / merge requests: builds both arches but
+# Validation build on merge requests: builds both arches but
 # does NOT push, so a broken Dockerfile is caught before merge. Skipped on the default
 # branch, where publish_ghcr already builds (and pushes) the same image.
 build_image:
+  extends: .ghcr_docker
   stage: build
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: never
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: never
-    - when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
     - |
       docker buildx build \
@@ -91,7 +105,9 @@ build_image:
 # Publish the multi-arch image to GHCR, auto-incrementing the CMK revision.
 # Runs automatically on merge to the default branch.
 publish_ghcr:
-  stage: publish
+  extends: .ghcr_docker
+  stage: deploy
+  interruptible: false
   resource_group: publish-ghcr
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'

@@ -1,0 +1,10 @@
+version: "2"
+linters:
+  exclusions:
+    rules:
+      - linters:
+          - errcheck
+        text: 'Error return value of `(os\.Setenv|os\.Unsetenv|resp\.Body\.Close|listener\.Close)` is not checked'
+      - linters:
+          - staticcheck
+        text: '^(QF|ST)[0-9]+:'
